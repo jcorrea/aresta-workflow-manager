@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+exec podman run --rm -v "$(pwd)":/app:Z -w /app -e COMPOSER_ALLOW_SUPERUSER=1 aresta-workflow-php composer "$@"

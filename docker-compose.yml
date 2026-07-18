@@ -1,0 +1,73 @@
+name: aresta-workflow-manager
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: .docker/php/Containerfile
+    container_name: aresta-workflow-app
+    working_dir: /app
+    volumes:
+      - .:/app:Z
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    environment:
+      APP_ENV: local
+      DB_CONNECTION: mysql
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_DATABASE: ${DB_DATABASE:-aresta_workflow}
+      DB_USERNAME: ${DB_USERNAME:-aresta_workflow}
+      DB_PASSWORD: ${DB_PASSWORD:-aresta_workflow}
+    command: php artisan serve --host=0.0.0.0 --port=8000
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - aresta-workflow
+
+  mysql:
+    image: mysql:8.0
+    container_name: aresta-workflow-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE:-aresta_workflow}
+      MYSQL_USER: ${DB_USERNAME:-aresta_workflow}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-aresta_workflow}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root}
+    ports:
+      - "${DB_PORT:-3306}:3306"
+    volumes:
+      - aresta-workflow-mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${DB_ROOT_PASSWORD:-root}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - aresta-workflow
+
+  # --- Análise estática/de vulnerabilidades (SonarQube) ---
+  # O servidor SonarQube roda centralizado numa VM compartilhada entre projetos, não aqui.
+  # Este serviço só faz o scan e envia o relatório pra lá; sobe sob demanda, não com
+  # `docker compose up`:
+  # SONAR_HOST_URL=http://<ip-da-vm>:9000 SONAR_TOKEN=<token> docker compose run --rm sonar-scanner
+  sonar-scanner:
+    image: sonarsource/sonar-scanner-cli:latest
+    container_name: aresta-workflow-sonar-scanner
+    profiles: ["scan"]
+    working_dir: /usr/src
+    volumes:
+      - .:/usr/src:Z
+    environment:
+      SONAR_HOST_URL: ${SONAR_HOST_URL:-}
+      SONAR_TOKEN: ${SONAR_TOKEN:-}
+    networks:
+      - aresta-workflow
+
+volumes:
+  aresta-workflow-mysql-data:
+
+networks:
+  aresta-workflow:
+    driver: bridge

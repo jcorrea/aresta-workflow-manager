@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+exec podman run --rm -v "$(pwd)":/app:Z -w /app -p 8000:8000 aresta-workflow-php php artisan serve --host=0.0.0.0 --port=8000
