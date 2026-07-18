@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "3eff30bb5045df1fdcf2cc48f3b3ff72",
+    "content-hash": "d8cb0717b0ee69952927c8b7ba497dd0",
     "packages": [
         {
             "name": "anourvalar/eloquent-serialize",
@@ -2091,6 +2091,78 @@
                 }
             ],
             "time": "2026-07-08T16:19:22+00:00"
+        },
+        {
+            "name": "inertiajs/inertia-laravel",
+            "version": "v3.1.1",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/inertiajs/inertia-laravel.git",
+                "reference": "022d54f1c125f57eef2b5f90bdecf69ee1df3e72"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/inertiajs/inertia-laravel/zipball/022d54f1c125f57eef2b5f90bdecf69ee1df3e72",
+                "reference": "022d54f1c125f57eef2b5f90bdecf69ee1df3e72",
+                "shasum": ""
+            },
+            "require": {
+                "ext-json": "*",
+                "laravel/framework": "^11.0|^12.0|^13.0",
+                "php": "^8.2.0",
+                "symfony/console": "^7.0|^8.0"
+            },
+            "conflict": {
+                "laravel/boost": "<2.2.0"
+            },
+            "require-dev": {
+                "guzzlehttp/guzzle": "^7.2",
+                "larastan/larastan": "^3.0",
+                "laravel/pint": "^1.16",
+                "mockery/mockery": "^1.3.3",
+                "orchestra/testbench": "^9.2|^10.0|^11.0",
+                "phpunit/phpunit": "^11.5|^12.0"
+            },
+            "suggest": {
+                "ext-pcntl": "Recommended when running the Inertia SSR server via the `inertia:start-ssr` artisan command."
+            },
+            "type": "library",
+            "extra": {
+                "laravel": {
+                    "providers": [
+                        "Inertia\\ServiceProvider"
+                    ]
+                }
+            },
+            "autoload": {
+                "files": [
+                    "./helpers.php"
+                ],
+                "psr-4": {
+                    "Inertia\\": "src"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Jonathan Reinink",
+                    "email": "jonathan@reinink.ca",
+                    "homepage": "https://reinink.ca"
+                }
+            ],
+            "description": "The Laravel adapter for Inertia.js.",
+            "keywords": [
+                "inertia",
+                "laravel"
+            ],
+            "support": {
+                "issues": "https://github.com/inertiajs/inertia-laravel/issues",
+                "source": "https://github.com/inertiajs/inertia-laravel/tree/v3.1.1"
+            },
+            "time": "2026-07-02T12:45:54+00:00"
         },
         {
             "name": "kirschbaum-development/eloquent-power-joins",
@@ -8601,6 +8673,76 @@
                 }
             ],
             "time": "2026-06-08T20:24:16+00:00"
+        },
+        {
+            "name": "tightenco/ziggy",
+            "version": "v2.6.3",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/tighten/ziggy.git",
+                "reference": "14c5744f155182188419f7729d96e0ed7225e73b"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/tighten/ziggy/zipball/14c5744f155182188419f7729d96e0ed7225e73b",
+                "reference": "14c5744f155182188419f7729d96e0ed7225e73b",
+                "shasum": ""
+            },
+            "require": {
+                "ext-json": "*",
+                "laravel/framework": ">=9.0",
+                "php": ">=8.1"
+            },
+            "require-dev": {
+                "laravel/folio": "^1.1",
+                "orchestra/testbench": "^8.0 || ^9.0 || ^10.0 || ^11.0",
+                "pestphp/pest": "^2.0 || ^3.0 || ^4.0",
+                "pestphp/pest-plugin-laravel": "^2.0 || ^3.0 || ^4.0"
+            },
+            "type": "library",
+            "extra": {
+                "laravel": {
+                    "providers": [
+                        "Tighten\\Ziggy\\ZiggyServiceProvider"
+                    ]
+                }
+            },
+            "autoload": {
+                "psr-4": {
+                    "Tighten\\Ziggy\\": "src/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Daniel Coulbourne",
+                    "email": "daniel@tighten.co"
+                },
+                {
+                    "name": "Jake Bathman",
+                    "email": "jake@tighten.co"
+                },
+                {
+                    "name": "Jacob Baker-Kretzmar",
+                    "email": "jacob@tighten.co"
+                }
+            ],
+            "description": "Use your Laravel named routes in JavaScript.",
+            "homepage": "https://github.com/tighten/ziggy",
+            "keywords": [
+                "Ziggy",
+                "javascript",
+                "laravel",
+                "routes"
+            ],
+            "support": {
+                "issues": "https://github.com/tighten/ziggy/issues",
+                "source": "https://github.com/tighten/ziggy/tree/v2.6.3"
+            },
+            "time": "2026-06-23T21:57:52+00:00"
         },
         {
             "name": "tijsverkoyen/css-to-inline-styles",

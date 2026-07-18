@@ -1,6 +1,11 @@
 <?php
 
 use App\Http\Controllers\Auth\AzureController;
+use App\Http\Controllers\WorkflowActivityController;
+use App\Http\Controllers\WorkflowController;
+use App\Http\Controllers\WorkflowStepController;
+use App\Http\Controllers\WorkflowTransitionController;
+use App\Http\Controllers\WorkflowVersionController;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 
@@ -27,4 +32,25 @@ Route::middleware('auth')->group(function () {
     Route::get('/', function () {
         return view('home');
     })->name('home');
+
+    Route::get('/workflows', [WorkflowController::class, 'index'])->name('workflows.index');
+    Route::post('/workflows', [WorkflowController::class, 'store'])->name('workflows.store');
+    Route::get('/workflows/{workflow}', [WorkflowController::class, 'show'])->name('workflows.show');
+    Route::post('/workflows/{workflow}/rollback', [WorkflowController::class, 'rollback'])->name('workflows.rollback');
+
+    Route::post('/workflows/{workflow}/versions', [WorkflowVersionController::class, 'store'])->name('workflows.versions.store');
+    Route::get('/workflows/{workflow}/versions/{version}/edit', [WorkflowVersionController::class, 'edit'])->name('workflows.versions.edit');
+    Route::post('/workflows/{workflow}/versions/{version}/publish', [WorkflowVersionController::class, 'publish'])->name('workflows.versions.publish');
+
+    Route::post('/workflows/{workflow}/versions/{version}/steps', [WorkflowStepController::class, 'store'])->name('workflow-steps.store');
+    Route::patch('/workflow-steps/{step}', [WorkflowStepController::class, 'update'])->name('workflow-steps.update');
+    Route::delete('/workflow-steps/{step}', [WorkflowStepController::class, 'destroy'])->name('workflow-steps.destroy');
+
+    Route::post('/workflows/{workflow}/versions/{version}/activities', [WorkflowActivityController::class, 'store'])->name('workflow-activities.store');
+    Route::patch('/workflow-activities/{activity}', [WorkflowActivityController::class, 'update'])->name('workflow-activities.update');
+    Route::delete('/workflow-activities/{activity}', [WorkflowActivityController::class, 'destroy'])->name('workflow-activities.destroy');
+
+    Route::post('/workflows/{workflow}/versions/{version}/transitions', [WorkflowTransitionController::class, 'store'])->name('workflow-transitions.store');
+    Route::patch('/workflow-transitions/{transition}', [WorkflowTransitionController::class, 'update'])->name('workflow-transitions.update');
+    Route::delete('/workflow-transitions/{transition}', [WorkflowTransitionController::class, 'destroy'])->name('workflow-transitions.destroy');
 });

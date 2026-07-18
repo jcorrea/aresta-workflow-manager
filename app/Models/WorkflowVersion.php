@@ -68,4 +68,76 @@ class WorkflowVersion extends Model
     {
         return $this->hasMany(WorkflowVersionActivation::class);
     }
+
+    /**
+     * Transforma o grafo (`workflow_steps`/`workflow_activities`/`workflow_transitions`) no
+     * formato de nós/arestas do Vue Flow (03-editor-visual.md §3) — `workflow_steps` viram
+     * "parent nodes" (grupo visual), `workflow_activities` viram nós filhos presos ao grupo
+     * (`parentNode`/`extent: 'parent'`), `workflow_transitions` viram `edges`. Só a lógica do
+     * grafo + layout (`position_x`/`position_y`/`width`/`height`/`canvas_json`) — nunca
+     * mistura com dado de execução (`ProcessInstance*`).
+     *
+     * @return array{nodes: array<int, array<string, mixed>>, edges: array<int, array<string, mixed>>, viewport: array<string, mixed>|null}
+     */
+    public function toGraphPayload(): array
+    {
+        $this->loadMissing(['steps.activities.assigneeRole', 'steps.activities.assigneeUser', 'transitions']);
+
+        $stepNodes = $this->steps->map(fn (WorkflowStep $step) => [
+            'id' => "step-{$step->id}",
+            'type' => 'step',
+            'position' => ['x' => $step->position_x, 'y' => $step->position_y],
+            'style' => ['width' => "{$step->width}px", 'height' => "{$step->height}px"],
+            'data' => [
+                'id' => $step->id,
+                'name' => $step->name,
+                'slaDays' => $step->sla_days,
+                'sortOrder' => $step->sort_order,
+            ],
+        ]);
+
+        $activityNodes = $this->steps->flatMap(
+            fn (WorkflowStep $step) => $step->activities->map(fn (WorkflowActivity $activity) => [
+                'id' => "activity-{$activity->id}",
+                'type' => $activity->type->value,
+                'position' => ['x' => $activity->position_x, 'y' => $activity->position_y],
+                'parentNode' => "step-{$step->id}",
+                'extent' => 'parent',
+                'data' => [
+                    'id' => $activity->id,
+                    'workflowStepId' => $step->id,
+                    'name' => $activity->name,
+                    'type' => $activity->type->value,
+                    'assigneeType' => $activity->assignee_type?->value,
+                    'assigneeRoleId' => $activity->assignee_role_id,
+                    'assigneeRoleName' => $activity->assigneeRole?->name,
+                    'assigneeUserId' => $activity->assignee_user_id,
+                    'assigneeUserName' => $activity->assigneeUser?->name,
+                    'config' => $activity->config,
+                    'slaHours' => $activity->sla_hours,
+                    'isStart' => $activity->is_start,
+                    'isEnd' => $activity->is_end,
+                ],
+            ]),
+        );
+
+        $edges = $this->transitions->map(fn (WorkflowTransition $transition) => [
+            'id' => "transition-{$transition->id}",
+            'source' => "activity-{$transition->from_activity_id}",
+            'target' => "activity-{$transition->to_activity_id}",
+            'label' => $transition->label,
+            'data' => [
+                'id' => $transition->id,
+                'conditionType' => $transition->condition_type->value,
+                'conditionExpression' => $transition->condition_expression,
+                'sortOrder' => $transition->sort_order,
+            ],
+        ]);
+
+        return [
+            'nodes' => $stepNodes->concat($activityNodes)->values()->all(),
+            'edges' => $edges->values()->all(),
+            'viewport' => $this->canvas_json,
+        ];
+    }
 }

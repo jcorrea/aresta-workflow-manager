@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Spatie\Permission\PermissionRegistrar;
 use Spatie\Permission\Traits\HasRoles;
 
 #[Fillable(['name', 'email', 'password', 'azure_id', 'avatar_url'])]
@@ -48,5 +49,34 @@ class User extends Authenticatable implements FilamentUser
     public function canAccessPanel(Panel $panel): bool
     {
         return $this->hasRole('platform-staff') || $this->organizations()->exists();
+    }
+
+    public function isPlatformStaff(): bool
+    {
+        return $this->hasRole('platform-staff');
+    }
+
+    /**
+     * `workflow-admin`/`workflow-editor`/`workflow-viewer` são provisionados por organização
+     * (`OrganizationObserver`, `organization_id` como team do spatie/laravel-permission) —
+     * como o contexto de team default da aplicação é `0` (`AppServiceProvider::boot()`, ainda
+     * sem um "trocador de organização" no MVP), checar um papel escopado a uma organização
+     * específica precisa trocar o team temporariamente, nunca confiar no team ativo da
+     * sessão (00-visao-geral.md §9, item em aberto).
+     */
+    public function hasOrganizationRole(int $organizationId, string $role): bool
+    {
+        $registrar = app(PermissionRegistrar::class);
+        $previousTeamId = $registrar->getPermissionsTeamId();
+
+        $registrar->setPermissionsTeamId($organizationId);
+        $this->unsetRelation('roles');
+
+        $has = $this->hasRole($role);
+
+        $registrar->setPermissionsTeamId($previousTeamId);
+        $this->unsetRelation('roles');
+
+        return $has;
     }
 }
