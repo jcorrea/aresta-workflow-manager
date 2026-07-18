@@ -2,6 +2,7 @@
 defineProps({
     data: { type: Object, required: true },
     selected: { type: Boolean, default: false },
+    readonly: { type: Boolean, default: false },
 });
 
 defineEmits(['add-activity']);
@@ -14,7 +15,12 @@ defineEmits(['add-activity']);
     >
         <div class="flex items-center justify-between rounded-t-lg bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-700">
             <span>{{ data.name }}</span>
-            <button type="button" class="text-indigo-600 hover:underline" @click.stop="$emit('add-activity', data.id)">
+            <button
+                v-if="!readonly"
+                type="button"
+                class="text-indigo-600 hover:underline"
+                @click.stop="$emit('add-activity', data.id)"
+            >
                 + atividade
             </button>
         </div>

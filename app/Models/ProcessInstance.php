@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\ProcessInstanceActivityStatus;
 use App\Enums\ProcessInstanceStatus;
 use App\Models\Concerns\BelongsToOrganization;
 use Database\Factories\ProcessInstanceFactory;
@@ -76,5 +77,54 @@ class ProcessInstance extends Model
     public function transitionLogs(): HasMany
     {
         return $this->hasMany(ProcessInstanceTransitionLog::class);
+    }
+
+    /**
+     * Reaproveita `WorkflowVersion::toGraphPayload()` (mesmo componente Vue Flow do editor,
+     * 03-editor-visual.md §7) e anota cada nó/aresta com o estado de execução real desta
+     * instância: nó concluído/ativo/não alcançado, aresta percorrida ou não (conforme
+     * `process_instance_transition_logs`). Em ciclos, um nó pode ter várias
+     * `ProcessInstanceActivity` — usa a mais recente pra representar "onde está agora".
+     *
+     * @return array{nodes: array<int, array<string, mixed>>, edges: array<int, array<string, mixed>>, viewport: array<string, mixed>|null}
+     */
+    public function toGraphPayload(): array
+    {
+        $payload = $this->workflowVersion->toGraphPayload();
+
+        $latestActivityByWorkflowActivityId = $this->activities()
+            ->orderBy('id')
+            ->get()
+            ->groupBy('workflow_activity_id')
+            ->map(fn ($group) => $group->last());
+
+        $traversedTransitionIds = $this->transitionLogs()
+            ->pluck('workflow_transition_id')
+            ->filter()
+            ->unique();
+
+        $payload['nodes'] = collect($payload['nodes'])->map(function (array $node) use ($latestActivityByWorkflowActivityId) {
+            if ($node['type'] === 'step') {
+                return $node;
+            }
+
+            $latest = $latestActivityByWorkflowActivityId->get($node['data']['id']);
+
+            $node['data']['executionStatus'] = match (true) {
+                $latest === null => 'not_reached',
+                $latest->status === ProcessInstanceActivityStatus::Completed => 'completed',
+                default => 'active',
+            };
+
+            return $node;
+        })->all();
+
+        $payload['edges'] = collect($payload['edges'])->map(function (array $edge) use ($traversedTransitionIds) {
+            $edge['data']['traversed'] = $traversedTransitionIds->contains($edge['data']['id']);
+
+            return $edge;
+        })->all();
+
+        return $payload;
     }
 }

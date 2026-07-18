@@ -16,12 +16,22 @@ const typeStyles = {
 
 const style = computed(() => typeStyles[props.data.type] ?? typeStyles.task);
 const isCondition = computed(() => props.data.type === 'condition');
+
+// Modo somente-leitura (03-editor-visual.md §7): quando `data.executionStatus` existe, o nó
+// é de uma ProcessInstance sendo acompanhada, não do editor — a cor de tipo dá lugar à cor de
+// progresso (concluído/ativo/não alcançado ainda).
+const executionStyle = {
+    completed: 'bg-green-100 border-green-500 opacity-100',
+    active: 'bg-white border-indigo-500 opacity-100 animate-pulse',
+    not_reached: 'bg-gray-50 border-gray-300 opacity-50',
+};
+const colorClass = computed(() => (props.data.executionStatus ? executionStyle[props.data.executionStatus] : style.value.color));
 </script>
 
 <template>
     <div
         class="min-w-[160px] rounded-lg border-2 px-3 py-2 text-xs shadow-sm"
-        :class="[style.color, selected ? 'ring-2 ring-indigo-500 ring-offset-1' : '']"
+        :class="[colorClass, selected ? 'ring-2 ring-indigo-500 ring-offset-1' : '']"
         :style="isCondition ? { clipPath: 'polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)', padding: '1.5rem 2rem' } : {}"
     >
         <Handle type="target" :position="Position.Top" />

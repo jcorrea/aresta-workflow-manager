@@ -3,6 +3,7 @@
 use App\Http\Controllers\Auth\AzureController;
 use App\Http\Controllers\InboxController;
 use App\Http\Controllers\ProcessInstanceActivityController;
+use App\Http\Controllers\ProcessInstanceController;
 use App\Http\Controllers\WorkflowActivityController;
 use App\Http\Controllers\WorkflowController;
 use App\Http\Controllers\WorkflowStepController;
@@ -59,4 +60,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/inbox', [InboxController::class, 'index'])->name('inbox.index');
     Route::post('/inbox/activities/{activity}/claim', [ProcessInstanceActivityController::class, 'claim'])->name('process-instance-activities.claim');
     Route::post('/inbox/activities/{activity}/complete', [ProcessInstanceActivityController::class, 'complete'])->name('process-instance-activities.complete');
+
+    Route::get('/instances', [ProcessInstanceController::class, 'index'])->name('process-instances.index');
+    Route::get('/instances/{instance:code}', [ProcessInstanceController::class, 'show'])->name('process-instances.show');
 });
