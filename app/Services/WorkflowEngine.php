@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Enums\AssigneeType;
 use App\Enums\ConditionType;
+use App\Enums\OrganizationRole;
 use App\Enums\ProcessInstanceActivityStatus;
 use App\Enums\ProcessInstanceStatus;
 use App\Enums\WorkflowActivityType;
@@ -15,8 +16,15 @@ use App\Models\User;
 use App\Models\Workflow;
 use App\Models\WorkflowActivity;
 use App\Models\WorkflowTransition;
+use App\Notifications\ActivityAssignedNotification;
+use App\Notifications\AutomatedActionFailedNotification;
+use App\Notifications\ProcessInstanceCompletedNotification;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Notification;
+use Spatie\Permission\Models\Role as PermissionRole;
+use Spatie\Permission\PermissionRegistrar;
+use Throwable;
 
 /**
  * Avalia o grafo (`workflow_activities` + `workflow_transitions`) de forma determinística —
@@ -85,10 +93,30 @@ class WorkflowEngine
         if ($activity->type === WorkflowActivityType::Condition) {
             $this->completeActivity($piActivity, []);
         } elseif ($activity->type === WorkflowActivityType::AutomatedAction) {
-            $this->completeActivity($piActivity, $this->executeAutomatedAction($activity, $instance));
+            $this->runAutomatedAction($piActivity, $activity);
+        } else {
+            $this->notifyAssigned($piActivity, $activity);
         }
 
         return $piActivity;
+    }
+
+    /**
+     * 04-integracao-e-notificacoes.md §4, item 1: notifica o responsável fixo diretamente, ou
+     * todo elegível quando a atividade nasce em fila (`assigned_user_id` nulo, por papel).
+     */
+    private function notifyAssigned(ProcessInstanceActivity $piActivity, WorkflowActivity $activity): void
+    {
+        if ($piActivity->assigned_user_id) {
+            $piActivity->assignedUser->notify(new ActivityAssignedNotification($piActivity));
+
+            return;
+        }
+
+        if ($activity->assignee_type === AssigneeType::Role) {
+            $eligibleUsers = $activity->assigneeRole?->users ?? collect();
+            Notification::send($eligibleUsers, new ActivityAssignedNotification($piActivity));
+        }
     }
 
     /**
@@ -110,6 +138,8 @@ class WorkflowEngine
                 'status' => ProcessInstanceStatus::Completed,
                 'completed_at' => now(),
             ]);
+
+            $instance->startedBy->notify(new ProcessInstanceCompletedNotification($instance));
 
             return;
         }
@@ -238,11 +268,63 @@ class WorkflowEngine
             $eligibleUserIds = $activity->assigneeRole?->users()->pluck('users.id') ?? collect();
 
             // Auto-atribui só quando há exatamente 1 elegível; senão nasce em fila
-            // (01-modelo-de-dados.md §3.4) — não implementado aqui, fase 4.
+            // (01-modelo-de-dados.md §3.4) — resolvida pela tela "Minhas tarefas"
+            // (04-integracao-e-notificacoes.md §3), fora deste serviço.
             return $eligibleUserIds->count() === 1 ? $eligibleUserIds->first() : null;
         }
 
         return null;
+    }
+
+    /**
+     * Uma ação automática que falha não trava a instância silenciosamente
+     * (04-integracao-e-notificacoes.md §4, item 5): a atividade fica em `in_progress` com o
+     * erro registrado em `result` (não chama `completeActivity()`, então `advance()` nunca
+     * roda), e `workflow-admin` da organização é notificado para intervenção manual.
+     */
+    private function runAutomatedAction(ProcessInstanceActivity $piActivity, WorkflowActivity $activity): void
+    {
+        try {
+            $result = $this->executeAutomatedAction($activity, $piActivity->processInstance);
+        } catch (Throwable $exception) {
+            $this->failAutomatedAction($piActivity, $exception->getMessage());
+
+            return;
+        }
+
+        if (($result['successful'] ?? true) === false) {
+            $this->failAutomatedAction($piActivity, "HTTP {$result['status']}");
+
+            return;
+        }
+
+        $this->completeActivity($piActivity, $result);
+    }
+
+    private function failAutomatedAction(ProcessInstanceActivity $piActivity, string $errorSummary): void
+    {
+        $piActivity->update(['result' => ['error' => $errorSummary]]);
+
+        $this->notifyWorkflowAdmins($piActivity, $errorSummary);
+    }
+
+    private function notifyWorkflowAdmins(ProcessInstanceActivity $piActivity, string $errorSummary): void
+    {
+        $organizationId = $piActivity->processInstance->organization_id;
+
+        $registrar = app(PermissionRegistrar::class);
+        $previousTeamId = $registrar->getPermissionsTeamId();
+        $registrar->setPermissionsTeamId($organizationId);
+
+        $admins = PermissionRole::query()
+            ->where('name', OrganizationRole::Admin->value)
+            ->where('organization_id', $organizationId)
+            ->first()
+            ?->users ?? collect();
+
+        $registrar->setPermissionsTeamId($previousTeamId);
+
+        Notification::send($admins, new AutomatedActionFailedNotification($piActivity, $errorSummary));
     }
 
     /**

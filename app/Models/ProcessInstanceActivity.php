@@ -26,6 +26,8 @@ class ProcessInstanceActivity extends Model
         'form_data',
         'result',
         'due_at',
+        'sla_warning_notified_at',
+        'sla_overdue_notified_at',
         'started_at',
         'completed_at',
     ];
@@ -42,6 +44,8 @@ class ProcessInstanceActivity extends Model
             'form_data' => 'array',
             'result' => 'array',
             'due_at' => 'datetime',
+            'sla_warning_notified_at' => 'datetime',
+            'sla_overdue_notified_at' => 'datetime',
             'started_at' => 'datetime',
             'completed_at' => 'datetime',
         ];

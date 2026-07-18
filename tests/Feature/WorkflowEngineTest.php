@@ -2,22 +2,30 @@
 
 namespace Tests\Feature;
 
+use App\Enums\AssigneeType;
 use App\Enums\ConditionType;
+use App\Enums\OrganizationRole;
 use App\Enums\ProcessInstanceActivityStatus;
 use App\Enums\ProcessInstanceStatus;
 use App\Enums\WorkflowActivityType;
 use App\Models\Organization;
 use App\Models\ProcessInstance;
 use App\Models\ProcessInstanceTransitionLog;
+use App\Models\Role;
 use App\Models\User;
 use App\Models\Workflow;
 use App\Models\WorkflowActivity;
 use App\Models\WorkflowStep;
 use App\Models\WorkflowTransition;
 use App\Models\WorkflowVersion;
+use App\Notifications\ActivityAssignedNotification;
+use App\Notifications\AutomatedActionFailedNotification;
+use App\Notifications\ProcessInstanceCompletedNotification;
 use App\Services\WorkflowEngine;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Notification;
+use Spatie\Permission\PermissionRegistrar;
 use Tests\TestCase;
 
 /**
@@ -29,6 +37,8 @@ class WorkflowEngineTest extends TestCase
     use RefreshDatabase;
 
     private WorkflowEngine $engine;
+
+    private Organization $org;
 
     private Workflow $workflow;
 
@@ -44,7 +54,8 @@ class WorkflowEngineTest extends TestCase
 
         $this->engine = app(WorkflowEngine::class);
 
-        $org = Organization::factory()->create();
+        $this->org = Organization::factory()->create();
+        $org = $this->org;
         $this->user = User::factory()->create();
         $org->users()->attach($this->user);
         $this->actingAs($this->user);
@@ -358,5 +369,95 @@ class WorkflowEngineTest extends TestCase
         $this->assertSame(200, $hookActivity->result['status']);
 
         $this->assertSame(ProcessInstanceStatus::Completed, $instance->fresh()->status);
+    }
+
+    public function test_automated_action_failure_does_not_complete_and_notifies_workflow_admins(): void
+    {
+        Notification::fake();
+        Http::fake([
+            'https://example.test/hook' => Http::response(['error' => 'boom'], 500),
+        ]);
+
+        $registrar = app(PermissionRegistrar::class);
+        $registrar->setPermissionsTeamId($this->org->id);
+        $admin = User::factory()->create();
+        $this->org->users()->attach($admin);
+        $admin->assignRole(OrganizationRole::Admin->value);
+        $registrar->setPermissionsTeamId(0);
+
+        $a = $this->activity(['is_start' => true]);
+        $hook = $this->activity([
+            'type' => WorkflowActivityType::AutomatedAction,
+            'config' => ['action' => 'webhook', 'url' => 'https://example.test/hook', 'method' => 'POST'],
+        ]);
+        $end = $this->activity(['is_end' => true]);
+        $this->transition($a, $hook);
+        $this->transition($hook, $end);
+
+        $instance = $this->engine->start($this->workflow, [], $this->user);
+        $this->engine->completeActivity($this->latestActivityFor($instance, $a));
+
+        $hookActivity = $this->latestActivityFor($instance, $hook);
+        $this->assertSame(ProcessInstanceActivityStatus::InProgress, $hookActivity->status);
+        $this->assertSame('HTTP 500', $hookActivity->result['error']);
+        $this->assertNull($this->latestActivityFor($instance, $end));
+        $this->assertSame(ProcessInstanceStatus::Running, $instance->fresh()->status);
+
+        Notification::assertSentTo($admin, AutomatedActionFailedNotification::class);
+        Notification::assertNotSentTo($this->user, AutomatedActionFailedNotification::class);
+    }
+
+    public function test_activating_a_task_with_a_fixed_user_assignee_notifies_that_user(): void
+    {
+        Notification::fake();
+
+        $assignee = User::factory()->create();
+        $this->org->users()->attach($assignee);
+
+        $a = $this->activity([
+            'is_start' => true,
+            'is_end' => true,
+            'assignee_type' => AssigneeType::User,
+            'assignee_user_id' => $assignee->id,
+        ]);
+
+        $this->engine->start($this->workflow, [], $this->user);
+
+        Notification::assertSentTo($assignee, ActivityAssignedNotification::class);
+    }
+
+    public function test_activating_a_queued_role_task_notifies_every_eligible_user(): void
+    {
+        Notification::fake();
+
+        $role = Role::factory()->for($this->org)->create();
+        $memberA = User::factory()->create();
+        $memberB = User::factory()->create();
+        $this->org->users()->attach([$memberA->id, $memberB->id]);
+        $role->users()->attach([$memberA->id, $memberB->id]);
+
+        $this->activity([
+            'is_start' => true,
+            'is_end' => true,
+            'assignee_type' => AssigneeType::Role,
+            'assignee_role_id' => $role->id,
+        ]);
+
+        $this->engine->start($this->workflow, [], $this->user);
+
+        Notification::assertSentTo($memberA, ActivityAssignedNotification::class);
+        Notification::assertSentTo($memberB, ActivityAssignedNotification::class);
+    }
+
+    public function test_process_completion_notifies_the_user_who_started_it(): void
+    {
+        Notification::fake();
+
+        $a = $this->activity(['is_start' => true, 'is_end' => true]);
+
+        $instance = $this->engine->start($this->workflow, [], $this->user);
+        $this->engine->completeActivity($this->latestActivityFor($instance, $a));
+
+        Notification::assertSentTo($this->user, ProcessInstanceCompletedNotification::class);
     }
 }

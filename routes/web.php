@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Controllers\Auth\AzureController;
+use App\Http\Controllers\InboxController;
+use App\Http\Controllers\ProcessInstanceActivityController;
 use App\Http\Controllers\WorkflowActivityController;
 use App\Http\Controllers\WorkflowController;
 use App\Http\Controllers\WorkflowStepController;
@@ -53,4 +55,8 @@ Route::middleware('auth')->group(function () {
     Route::post('/workflows/{workflow}/versions/{version}/transitions', [WorkflowTransitionController::class, 'store'])->name('workflow-transitions.store');
     Route::patch('/workflow-transitions/{transition}', [WorkflowTransitionController::class, 'update'])->name('workflow-transitions.update');
     Route::delete('/workflow-transitions/{transition}', [WorkflowTransitionController::class, 'destroy'])->name('workflow-transitions.destroy');
+
+    Route::get('/inbox', [InboxController::class, 'index'])->name('inbox.index');
+    Route::post('/inbox/activities/{activity}/claim', [ProcessInstanceActivityController::class, 'claim'])->name('process-instance-activities.claim');
+    Route::post('/inbox/activities/{activity}/complete', [ProcessInstanceActivityController::class, 'complete'])->name('process-instance-activities.complete');
 });
