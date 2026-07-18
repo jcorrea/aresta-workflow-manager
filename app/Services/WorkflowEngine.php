@@ -9,6 +9,7 @@ use App\Enums\ProcessInstanceActivityStatus;
 use App\Enums\ProcessInstanceStatus;
 use App\Enums\WorkflowActivityType;
 use App\Exceptions\WorkflowNotPublishedException;
+use App\Models\ExternalSystem;
 use App\Models\ProcessInstance;
 use App\Models\ProcessInstanceActivity;
 use App\Models\ProcessInstanceTransitionLog;
@@ -39,9 +40,14 @@ class WorkflowEngine
     ) {}
 
     /**
+     * `$startedBy` aceita um `ExternalSystem` além de `User`
+     * (04-integracao-e-notificacoes.md §5): uma instância pode nascer via API de um sistema
+     * GIITS externo, sem nenhum usuário humano por trás — `process_instances.started_by`
+     * fica nulo nesse caso (§4, item 4: não há quem notificar ao concluir).
+     *
      * @param  array<string, mixed>  $context
      */
-    public function start(Workflow $workflow, array $context, User $startedBy, ?string $name = null): ProcessInstance
+    public function start(Workflow $workflow, array $context, User|ExternalSystem $startedBy, ?string $name = null): ProcessInstance
     {
         if (! $workflow->current_published_version_id) {
             throw new WorkflowNotPublishedException($workflow);
@@ -55,7 +61,8 @@ class WorkflowEngine
             'code' => $this->generateCode(),
             'name' => $name ?? $workflow->name,
             'status' => ProcessInstanceStatus::Running,
-            'started_by' => $startedBy->id,
+            'started_by' => $startedBy instanceof User ? $startedBy->id : null,
+            'started_by_external_system_id' => $startedBy instanceof ExternalSystem ? $startedBy->id : null,
             'started_at' => now(),
             'context' => $context,
         ]);
@@ -89,11 +96,17 @@ class WorkflowEngine
         ]);
 
         // `condition`/`automated_action` não esperam humano — avaliam/executam e concluem
-        // na hora (§2, item 2), disparando advance() sem intervenção externa.
+        // na hora (§2, item 2), disparando advance() sem intervenção externa. Exceção:
+        // `action = api_confirmation` (04-integracao-e-notificacoes.md §5) é uma automação
+        // cuja execução de fato é externa — fica em `in_progress` esperando o sistema GIITS
+        // confirmar via `POST /api/instances/{code}/activities/{id}/complete`, não completa
+        // sozinha aqui.
         if ($activity->type === WorkflowActivityType::Condition) {
             $this->completeActivity($piActivity, []);
         } elseif ($activity->type === WorkflowActivityType::AutomatedAction) {
-            $this->runAutomatedAction($piActivity, $activity);
+            if (($activity->config['action'] ?? null) !== 'api_confirmation') {
+                $this->runAutomatedAction($piActivity, $activity);
+            }
         } else {
             $this->notifyAssigned($piActivity, $activity);
         }
@@ -139,7 +152,9 @@ class WorkflowEngine
                 'completed_at' => now(),
             ]);
 
-            $instance->startedBy->notify(new ProcessInstanceCompletedNotification($instance));
+            // Instância iniciada via API por um sistema externo (started_by nulo) não tem
+            // usuário humano para notificar (§4, item 4).
+            $instance->startedBy?->notify(new ProcessInstanceCompletedNotification($instance));
 
             return;
         }

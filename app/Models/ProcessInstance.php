@@ -27,6 +27,7 @@ class ProcessInstance extends Model
         'name',
         'status',
         'started_by',
+        'started_by_external_system_id',
         'started_at',
         'completed_at',
         'context',
@@ -50,6 +51,16 @@ class ProcessInstance extends Model
     public function startedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'started_by');
+    }
+
+    /**
+     * Iniciada via API por um sistema externo em vez de um usuário
+     * (04-integracao-e-notificacoes.md §5) — exatamente um dos dois (`startedBy`/
+     * `startedByExternalSystem`) é preenchido, nunca os dois.
+     */
+    public function startedByExternalSystem(): BelongsTo
+    {
+        return $this->belongsTo(ExternalSystem::class);
     }
 
     public function steps(): HasMany

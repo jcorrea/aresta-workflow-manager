@@ -2,6 +2,7 @@
 
 namespace App\Models\Scopes;
 
+use App\Models\ExternalSystem;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Scope;
@@ -28,6 +29,14 @@ class OrganizationScope implements Scope
         if (! $user) {
             $builder->whereRaw('1 = 0');
 
+            return;
+        }
+
+        // Sistema GIITS autenticado via Sanctum (04-integracao-e-notificacoes.md §5.4): não
+        // é membro de nenhuma `organization_user`, mas é confiável para atuar em qualquer
+        // organização ativa — a organização alvo é validada explicitamente no controller a
+        // partir do payload, não por este scope.
+        if ($user instanceof ExternalSystem) {
             return;
         }
 
