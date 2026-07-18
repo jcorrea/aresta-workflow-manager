@@ -124,6 +124,24 @@ class WorkflowGraphValidatorTest extends TestCase
         $this->assertTrue($issues->contains(fn ($i) => $i->code === 'condition_without_outgoing'));
     }
 
+    /**
+     * Achado testando a app de verdade num browser: um nó condition com is_end=true termina
+     * o processo assim que ativado (WorkflowEngine::completeActivity() retorna antes de
+     * chamar advance()) — não é um "condition preso no meio do grafo" e não deveria ser
+     * sinalizado como tal.
+     */
+    public function test_condition_node_that_is_also_is_end_does_not_need_an_outgoing_transition(): void
+    {
+        $a = $this->activity(['is_start' => true]);
+        $end = $this->activity(['type' => WorkflowActivityType::Condition, 'is_end' => true, 'assignee_type' => null, 'assignee_user_id' => null]);
+        $this->transition($a, $end);
+
+        $issues = $this->validator->validate($this->version);
+
+        $this->assertFalse($issues->contains(fn ($i) => $i->code === 'condition_without_outgoing'));
+        $this->assertTrue($this->validator->isPublishable($this->version));
+    }
+
     public function test_task_without_assignee_type_is_an_error(): void
     {
         $a = $this->activity(['is_start' => true, 'is_end' => true, 'assignee_type' => null, 'assignee_user_id' => null]);

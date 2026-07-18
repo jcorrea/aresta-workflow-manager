@@ -9,6 +9,7 @@ use App\Http\Controllers\WorkflowController;
 use App\Http\Controllers\WorkflowStepController;
 use App\Http\Controllers\WorkflowTransitionController;
 use App\Http\Controllers\WorkflowVersionController;
+use App\Models\User;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 
@@ -30,6 +31,18 @@ Route::post('/logout', function () {
 
 Route::get('/auth/azure/redirect', [AzureController::class, 'redirect'])->name('azure.redirect');
 Route::get('/auth/azure/callback', [AzureController::class, 'callback'])->name('azure.callback');
+
+// TEMPORÁRIO — só pra testar a UI num ambiente local sem App Registration Azure real
+// configurado (AZURE_CLIENT_ID/SECRET vazios). Remover antes de qualquer deploy real; nunca
+// habilitado fora de app()->environment('local').
+if (app()->environment('local')) {
+    Route::get('/dev-login', function () {
+        $user = User::where('email', request('email', 'admin@demo.test'))->firstOrFail();
+        Auth::login($user);
+
+        return redirect()->route('home');
+    })->name('dev-login');
+}
 
 Route::middleware('auth')->group(function () {
     Route::get('/', function () {

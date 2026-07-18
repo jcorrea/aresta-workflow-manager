@@ -144,6 +144,11 @@ class WorkflowGraphValidator
     {
         return $activities
             ->filter(fn (WorkflowActivity $a) => $a->type === WorkflowActivityType::Condition)
+            // Um nó condition com is_end=true termina o processo assim que ativado
+            // (WorkflowEngine::completeActivity() retorna antes de precisar de advance()) —
+            // não precisa de transição de saída nenhuma, ao contrário de um condition
+            // "no meio do grafo".
+            ->filter(fn (WorkflowActivity $a) => ! $a->is_end)
             ->filter(fn (WorkflowActivity $a) => $successors->get($a->id, collect())->isEmpty())
             ->map(fn (WorkflowActivity $a) => new GraphIssue(
                 'condition_without_outgoing',
