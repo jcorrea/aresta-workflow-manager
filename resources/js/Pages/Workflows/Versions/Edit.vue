@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, toRaw } from 'vue';
 import { Head, router } from '@inertiajs/vue3';
 import { VueFlow, useVueFlow } from '@vue-flow/core';
 import { Background } from '@vue-flow/background';
@@ -18,8 +18,10 @@ const props = defineProps({
     users: { type: Array, required: true },
 });
 
-const nodes = ref(structuredClone(props.graph.nodes));
-const edges = ref(structuredClone(props.graph.edges));
+// `props` é reativo (Proxy do Vue) — structuredClone() nativo do navegador não consegue
+// clonar um Proxy (DataCloneError), mesmo em array vazio. toRaw() desembrulha antes de clonar.
+const nodes = ref(structuredClone(toRaw(props.graph.nodes)));
+const edges = ref(structuredClone(toRaw(props.graph.edges)));
 const selected = ref(null); // { kind: 'step' | 'activity' | 'transition', id: number }
 const publishing = ref(false);
 const publishErrors = ref([]);
