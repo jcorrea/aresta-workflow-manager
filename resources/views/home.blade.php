@@ -172,7 +172,10 @@
         </ul>
 
         <div class="actions">
-            <a class="btn btn-primary" href="{{ url('/admin') }}">Painel administrativo</a>
+            <a class="btn btn-primary" href="{{ route('workflows.index') }}">Ir para Workflows</a>
+            <a class="btn btn-secondary" href="{{ route('process-instances.index') }}">Instâncias em andamento</a>
+            <a class="btn btn-secondary" href="{{ route('inbox.index') }}">Minhas tarefas</a>
+            <a class="btn btn-secondary" href="{{ url('/admin') }}">Painel administrativo</a>
             <form method="POST" action="{{ route('logout') }}">
                 @csrf
                 <button type="submit" class="btn btn-secondary">Sair</button>

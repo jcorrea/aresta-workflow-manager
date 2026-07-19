@@ -2,6 +2,7 @@
 import { reactive } from 'vue';
 import { Head, router } from '@inertiajs/vue3';
 import { route } from 'ziggy-js';
+import AppNav from '@/Components/AppNav.vue';
 
 const props = defineProps({
     activities: { type: Array, required: true },
@@ -29,6 +30,8 @@ function complete(activity) {
     <Head title="Minhas tarefas" />
 
     <div class="min-h-screen bg-canvas">
+        <AppNav active="inbox" />
+
         <div class="mx-auto max-w-3xl p-6">
             <h1 class="mb-4 text-lg font-semibold text-ink">Minhas tarefas</h1>
 

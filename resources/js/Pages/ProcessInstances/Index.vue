@@ -1,6 +1,7 @@
 <script setup>
 import { Head } from '@inertiajs/vue3';
 import { route } from 'ziggy-js';
+import AppNav from '@/Components/AppNav.vue';
 
 defineProps({
     instances: { type: Array, required: true },
@@ -11,6 +12,8 @@ defineProps({
     <Head title="Instâncias" />
 
     <div class="min-h-screen bg-canvas">
+        <AppNav active="instances" />
+
         <div class="mx-auto max-w-3xl p-6">
             <h1 class="mb-4 text-lg font-semibold text-ink">Instâncias em andamento</h1>
 

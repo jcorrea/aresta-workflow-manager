@@ -2,6 +2,7 @@
 import { ref } from 'vue';
 import { Head, useForm } from '@inertiajs/vue3';
 import { route } from 'ziggy-js';
+import AppNav from '@/Components/AppNav.vue';
 
 const props = defineProps({
     workflows: { type: Array, required: true },
@@ -23,6 +24,8 @@ function submit() {
     <Head title="Workflows" />
 
     <div class="min-h-screen bg-canvas">
+        <AppNav active="workflows" />
+
         <div class="mx-auto max-w-3xl p-6">
             <div class="mb-4 flex items-center justify-between">
                 <h1 class="text-lg font-semibold text-ink">Workflows</h1>
