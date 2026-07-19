@@ -222,19 +222,23 @@ function publish() {
 <template>
     <Head :title="`Editar ${workflow.name}`" />
 
-    <div class="flex h-screen flex-col bg-gray-100">
-        <header class="flex items-center justify-between border-b bg-white px-4 py-2 shadow-sm">
+    <div class="flex h-screen flex-col bg-canvas">
+        <header class="flex items-center justify-between border-b border-ink/10 bg-panel px-4 py-2">
             <div>
-                <h1 class="text-sm font-semibold text-gray-800">{{ workflow.name }}</h1>
-                <p class="text-xs text-gray-500">Rascunho — {{ nodes.filter((n) => n.type !== 'step').length }} atividade(s)</p>
+                <h1 class="text-sm font-semibold text-ink">{{ workflow.name }}</h1>
+                <p class="text-xs text-ink/60">Rascunho — {{ nodes.filter((n) => n.type !== 'step').length }} atividade(s)</p>
             </div>
             <div class="flex items-center gap-2">
-                <button type="button" class="rounded border px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50" @click="addStep">
+                <button
+                    type="button"
+                    class="rounded border border-ink/15 px-3 py-1 text-xs font-medium text-ink hover:bg-ink/5"
+                    @click="addStep"
+                >
                     + Etapa
                 </button>
                 <button
                     type="button"
-                    class="rounded bg-indigo-600 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+                    class="rounded bg-accent px-3 py-1 text-xs font-medium text-accent-ink hover:opacity-90 disabled:opacity-50"
                     :disabled="publishing"
                     @click="publish"
                 >
@@ -243,7 +247,7 @@ function publish() {
             </div>
         </header>
 
-        <div v-if="errorIssues.length || warningIssues.length || publishErrors.length" class="border-b bg-white px-4 py-2 text-xs">
+        <div v-if="errorIssues.length || warningIssues.length || publishErrors.length" class="border-b border-ink/10 bg-panel px-4 py-2 text-xs">
             <p v-for="(msg, i) in publishErrors" :key="`pub-${i}`" class="text-red-600">{{ msg }}</p>
             <p v-for="issue in errorIssues" :key="issue.code + issue.activityIds.join(',')" class="text-red-600">⛔ {{ issue.message }}</p>
             <p v-for="issue in warningIssues" :key="issue.code + issue.activityIds.join(',')" class="text-amber-600">⚠️ {{ issue.message }}</p>
@@ -260,7 +264,7 @@ function publish() {
                     @pane-click="onPaneClick"
                     @node-drag-stop="onNodeDragStop"
                 >
-                    <Background />
+                    <Background pattern-color="rgba(13, 13, 13, 0.08)" :gap="20" />
                     <Controls />
 
                     <template #node-step="nodeProps">
@@ -281,22 +285,22 @@ function publish() {
                 </VueFlow>
             </div>
 
-            <aside v-if="selected" class="w-80 overflow-y-auto border-l bg-white p-4 text-sm">
+            <aside v-if="selected" class="w-80 overflow-y-auto border-l border-ink/10 bg-panel p-4 text-sm">
                 <div v-if="selectedStep">
-                    <h2 class="mb-2 font-semibold">Etapa</h2>
-                    <label class="mb-2 block text-xs">
+                    <h2 class="mb-2 font-semibold text-ink">Etapa</h2>
+                    <label class="mb-2 block text-xs text-ink">
                         Nome
                         <input
-                            class="mt-1 w-full rounded border px-2 py-1"
+                            class="mt-1 w-full rounded border border-ink/15 bg-canvas px-2 py-1 text-ink"
                             :value="selectedStep.data.name"
                             @change="updateStep({ name: $event.target.value })"
                         />
                     </label>
-                    <label class="mb-2 block text-xs">
+                    <label class="mb-2 block text-xs text-ink">
                         SLA (dias)
                         <input
                             type="number"
-                            class="mt-1 w-full rounded border px-2 py-1"
+                            class="mt-1 w-full rounded border border-ink/15 bg-canvas px-2 py-1 text-ink"
                             :value="selectedStep.data.slaDays"
                             @change="updateStep({ sla_days: $event.target.value ? Number($event.target.value) : null })"
                         />
@@ -305,19 +309,19 @@ function publish() {
                 </div>
 
                 <div v-else-if="selectedActivity">
-                    <h2 class="mb-2 font-semibold">Atividade</h2>
-                    <label class="mb-2 block text-xs">
+                    <h2 class="mb-2 font-semibold text-ink">Atividade</h2>
+                    <label class="mb-2 block text-xs text-ink">
                         Nome
                         <input
-                            class="mt-1 w-full rounded border px-2 py-1"
+                            class="mt-1 w-full rounded border border-ink/15 bg-canvas px-2 py-1 text-ink"
                             :value="selectedActivity.data.name"
                             @change="updateActivity({ name: $event.target.value })"
                         />
                     </label>
-                    <label class="mb-2 block text-xs">
+                    <label class="mb-2 block text-xs text-ink">
                         Tipo
                         <select
-                            class="mt-1 w-full rounded border px-2 py-1"
+                            class="mt-1 w-full rounded border border-ink/15 bg-canvas px-2 py-1 text-ink"
                             :value="selectedActivity.data.type"
                             @change="updateActivity({ type: $event.target.value })"
                         >
@@ -329,10 +333,10 @@ function publish() {
                     </label>
 
                     <template v-if="['task', 'form'].includes(selectedActivity.data.type)">
-                        <label class="mb-2 block text-xs">
+                        <label class="mb-2 block text-xs text-ink">
                             Responsável
                             <select
-                                class="mt-1 w-full rounded border px-2 py-1"
+                                class="mt-1 w-full rounded border border-ink/15 bg-canvas px-2 py-1 text-ink"
                                 :value="selectedActivity.data.assigneeType ?? ''"
                                 @change="updateActivity({ assignee_type: $event.target.value || null })"
                             >
@@ -341,31 +345,31 @@ function publish() {
                                 <option value="user">Usuário</option>
                             </select>
                         </label>
-                        <label v-if="selectedActivity.data.assigneeType === 'role'" class="mb-2 block text-xs">
+                        <label v-if="selectedActivity.data.assigneeType === 'role'" class="mb-2 block text-xs text-ink">
                             Papel
                             <select
-                                class="mt-1 w-full rounded border px-2 py-1"
+                                class="mt-1 w-full rounded border border-ink/15 bg-canvas px-2 py-1 text-ink"
                                 :value="selectedActivity.data.assigneeRoleId ?? ''"
                                 @change="updateActivity({ assignee_role_id: Number($event.target.value) })"
                             >
                                 <option v-for="role in roles" :key="role.id" :value="role.id">{{ role.name }}</option>
                             </select>
                         </label>
-                        <label v-if="selectedActivity.data.assigneeType === 'user'" class="mb-2 block text-xs">
+                        <label v-if="selectedActivity.data.assigneeType === 'user'" class="mb-2 block text-xs text-ink">
                             Usuário
                             <select
-                                class="mt-1 w-full rounded border px-2 py-1"
+                                class="mt-1 w-full rounded border border-ink/15 bg-canvas px-2 py-1 text-ink"
                                 :value="selectedActivity.data.assigneeUserId ?? ''"
                                 @change="updateActivity({ assignee_user_id: Number($event.target.value) })"
                             >
                                 <option v-for="user in users" :key="user.id" :value="user.id">{{ user.name }}</option>
                             </select>
                         </label>
-                        <label class="mb-2 block text-xs">
+                        <label class="mb-2 block text-xs text-ink">
                             SLA (horas)
                             <input
                                 type="number"
-                                class="mt-1 w-full rounded border px-2 py-1"
+                                class="mt-1 w-full rounded border border-ink/15 bg-canvas px-2 py-1 text-ink"
                                 :value="selectedActivity.data.slaHours"
                                 @change="updateActivity({ sla_hours: $event.target.value ? Number($event.target.value) : null })"
                             />
@@ -373,10 +377,10 @@ function publish() {
                     </template>
 
                     <template v-if="selectedActivity.data.type === 'automated_action'">
-                        <label class="mb-2 block text-xs">
+                        <label class="mb-2 block text-xs text-ink">
                             Ação
                             <select
-                                class="mt-1 w-full rounded border px-2 py-1"
+                                class="mt-1 w-full rounded border border-ink/15 bg-canvas px-2 py-1 text-ink"
                                 :value="selectedActivity.data.config?.action ?? ''"
                                 @change="updateActivity({ config: { ...selectedActivity.data.config, action: $event.target.value } })"
                             >
@@ -385,10 +389,10 @@ function publish() {
                                 <option value="generate_document">Gerar documento</option>
                             </select>
                         </label>
-                        <label v-if="selectedActivity.data.config?.action === 'webhook'" class="mb-2 block text-xs">
+                        <label v-if="selectedActivity.data.config?.action === 'webhook'" class="mb-2 block text-xs text-ink">
                             URL
                             <input
-                                class="mt-1 w-full rounded border px-2 py-1"
+                                class="mt-1 w-full rounded border border-ink/15 bg-canvas px-2 py-1 text-ink"
                                 :value="selectedActivity.data.config?.url ?? ''"
                                 @change="updateActivity({ config: { ...selectedActivity.data.config, url: $event.target.value, method: selectedActivity.data.config?.method ?? 'POST' } })"
                             />
@@ -396,7 +400,7 @@ function publish() {
                     </template>
 
                     <div class="mb-2 flex gap-4 text-xs">
-                        <label class="flex items-center gap-1">
+                        <label class="flex items-center gap-1 text-ink">
                             <input
                                 type="checkbox"
                                 :checked="selectedActivity.data.isStart"
@@ -404,7 +408,7 @@ function publish() {
                             />
                             Início
                         </label>
-                        <label class="flex items-center gap-1">
+                        <label class="flex items-center gap-1 text-ink">
                             <input
                                 type="checkbox"
                                 :checked="selectedActivity.data.isEnd"
@@ -418,19 +422,19 @@ function publish() {
                 </div>
 
                 <div v-else-if="selectedTransition">
-                    <h2 class="mb-2 font-semibold">Transição</h2>
-                    <label class="mb-2 block text-xs">
+                    <h2 class="mb-2 font-semibold text-ink">Transição</h2>
+                    <label class="mb-2 block text-xs text-ink">
                         Rótulo
                         <input
-                            class="mt-1 w-full rounded border px-2 py-1"
+                            class="mt-1 w-full rounded border border-ink/15 bg-canvas px-2 py-1 text-ink"
                             :value="selectedTransition.label ?? ''"
                             @change="updateTransition({ label: $event.target.value || null })"
                         />
                     </label>
-                    <label class="mb-2 block text-xs">
+                    <label class="mb-2 block text-xs text-ink">
                         Tipo
                         <select
-                            class="mt-1 w-full rounded border px-2 py-1"
+                            class="mt-1 w-full rounded border border-ink/15 bg-canvas px-2 py-1 text-ink"
                             :value="selectedTransition.data.conditionType"
                             @change="updateTransition({ condition_type: $event.target.value })"
                         >
@@ -440,23 +444,23 @@ function publish() {
                     </label>
 
                     <template v-if="selectedTransition.data.conditionType === 'expression'">
-                        <p class="mb-1 text-[11px] text-gray-500">
+                        <p class="mb-1 text-[11px] text-ink/60">
                             Condição simples: campo, operador e valor — para combinar várias condições, edite via API por
                             enquanto (fora do escopo do MVP do builder visual).
                         </p>
-                        <label class="mb-2 block text-xs">
+                        <label class="mb-2 block text-xs text-ink">
                             Campo
                             <input
-                                class="mt-1 w-full rounded border px-2 py-1"
+                                class="mt-1 w-full rounded border border-ink/15 bg-canvas px-2 py-1 text-ink"
                                 placeholder="context.valor_proposta"
                                 :value="selectedTransition.data.conditionExpression?.field ?? ''"
                                 @change="updateTransition({ condition_expression: { ...selectedTransition.data.conditionExpression, field: $event.target.value } })"
                             />
                         </label>
-                        <label class="mb-2 block text-xs">
+                        <label class="mb-2 block text-xs text-ink">
                             Operador
                             <select
-                                class="mt-1 w-full rounded border px-2 py-1"
+                                class="mt-1 w-full rounded border border-ink/15 bg-canvas px-2 py-1 text-ink"
                                 :value="selectedTransition.data.conditionExpression?.operator ?? '='"
                                 @change="updateTransition({ condition_expression: { ...selectedTransition.data.conditionExpression, operator: $event.target.value } })"
                             >
@@ -468,10 +472,10 @@ function publish() {
                                 <option value="<=">&lt;= menor ou igual</option>
                             </select>
                         </label>
-                        <label class="mb-2 block text-xs">
+                        <label class="mb-2 block text-xs text-ink">
                             Valor
                             <input
-                                class="mt-1 w-full rounded border px-2 py-1"
+                                class="mt-1 w-full rounded border border-ink/15 bg-canvas px-2 py-1 text-ink"
                                 :value="selectedTransition.data.conditionExpression?.value ?? ''"
                                 @change="updateTransition({ condition_expression: { ...selectedTransition.data.conditionExpression, value: $event.target.value } })"
                             />
@@ -489,4 +493,21 @@ function publish() {
 @import '@vue-flow/core/dist/style.css';
 @import '@vue-flow/core/dist/theme-default.css';
 @import '@vue-flow/controls/dist/style.css';
+
+/* Controles do canvas (zoom/fit/lock) na cor da marca — 05-identidade-visual.md §7.3 */
+.vue-flow__controls {
+    box-shadow: 0 0 0 1px rgba(13, 13, 13, 0.08);
+    border-radius: 8px;
+    overflow: hidden;
+}
+.vue-flow__controls-button {
+    background: var(--color-panel);
+    border-bottom: 1px solid rgba(13, 13, 13, 0.08);
+}
+.vue-flow__controls-button:hover {
+    background: color-mix(in srgb, var(--color-accent) 15%, var(--color-panel));
+}
+.vue-flow__controls-button svg {
+    fill: var(--color-ink);
+}
 </style>

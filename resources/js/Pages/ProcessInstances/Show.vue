@@ -14,15 +14,16 @@ const props = defineProps({
 
 const nodes = computed(() => props.graph.nodes);
 
-// Arestas percorridas ficam destacadas; as não percorridas do desenho ficam em cinza claro
-// (03-editor-visual.md §7).
+// Arestas percorridas ficam destacadas com o acento da marca; as não percorridas do desenho
+// ficam em cinza neutro, fora da paleta de marca (03-editor-visual.md §7,
+// 05-identidade-visual.md §7.3).
 const edges = computed(() =>
     props.graph.edges.map((edge) => ({
         ...edge,
         animated: edge.data.traversed,
         style: edge.data.traversed
-            ? { stroke: '#4f46e5', strokeWidth: 2 }
-            : { stroke: '#d1d5db', strokeWidth: 1 },
+            ? { stroke: 'var(--color-accent)', strokeWidth: 2 }
+            : { stroke: '#D4D4D4', strokeWidth: 1 },
     })),
 );
 </script>
@@ -30,17 +31,17 @@ const edges = computed(() =>
 <template>
     <Head :title="`Acompanhar ${instance.name}`" />
 
-    <div class="flex h-screen flex-col bg-gray-100">
-        <header class="flex items-center justify-between border-b bg-white px-4 py-2 shadow-sm">
+    <div class="flex h-screen flex-col bg-canvas">
+        <header class="flex items-center justify-between border-b border-ink/10 bg-panel px-4 py-2">
             <div>
-                <h1 class="text-sm font-semibold text-gray-800">{{ instance.name }}</h1>
-                <p class="text-xs text-gray-500">{{ instance.code }} — {{ instance.status }}</p>
+                <h1 class="text-sm font-semibold text-ink">{{ instance.name }}</h1>
+                <p class="text-xs text-ink/60">{{ instance.code }} — {{ instance.status }}</p>
             </div>
         </header>
 
         <div class="flex-1">
             <VueFlow :nodes="nodes" :edges="edges" :nodes-draggable="false" :nodes-connectable="false" :elements-selectable="false">
-                <Background />
+                <Background pattern-color="rgba(13, 13, 13, 0.08)" :gap="20" />
                 <Controls :show-interactive="false" />
 
                 <template #node-step="nodeProps">
@@ -67,4 +68,21 @@ const edges = computed(() =>
 @import '@vue-flow/core/dist/style.css';
 @import '@vue-flow/core/dist/theme-default.css';
 @import '@vue-flow/controls/dist/style.css';
+
+/* Controles do canvas (zoom/fit/lock) na cor da marca — 05-identidade-visual.md §7.3 */
+.vue-flow__controls {
+    box-shadow: 0 0 0 1px rgba(13, 13, 13, 0.08);
+    border-radius: 8px;
+    overflow: hidden;
+}
+.vue-flow__controls-button {
+    background: var(--color-panel);
+    border-bottom: 1px solid rgba(13, 13, 13, 0.08);
+}
+.vue-flow__controls-button:hover {
+    background: color-mix(in srgb, var(--color-accent) 15%, var(--color-panel));
+}
+.vue-flow__controls-button svg {
+    fill: var(--color-ink);
+}
 </style>

@@ -17,6 +17,8 @@ motor de execução e o editor visual ainda não foram implementados, só especi
 3. `docs/specs/02-motor-de-execucao.md` — motor de execução (fork/join/condição/SLA).
 4. `docs/specs/03-editor-visual.md` — editor Vue Flow.
 5. `docs/specs/04-integracao-e-notificacoes.md` — permissões, notificações, API externa.
+6. `docs/specs/05-identidade-visual.md` — identidade visual, herdada 100% do brandbook do
+   `aresta.dev` (cores, tipografia, logo) e aplicada a Filament, editor visual, Inertia e login.
 
 Cada arquivo de spec termina com uma seção "itens em aberto" — são decisões que ainda precisam ser
 validadas com o usuário antes ou durante a implementação da fase correspondente, não suposições para

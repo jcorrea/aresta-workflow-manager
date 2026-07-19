@@ -28,8 +28,12 @@ class AdminPanelProvider extends PanelProvider
             ->id('admin')
             ->path('admin')
             ->brandName('Aresta Workflow Manager')
+            ->brandLogo(asset('img/aresta-logo-black.svg'))
+            ->darkModeBrandLogo(asset('img/aresta-logo.svg'))
+            ->brandLogoHeight('1.75rem')
+            ->favicon(asset('img/favicon.svg'))
             ->colors([
-                'primary' => Color::Amber,
+                'primary' => Color::hex('#00FF66'),
             ])
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\Filament\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\Filament\Pages')

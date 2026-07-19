@@ -3,7 +3,49 @@
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 @source '../../storage/framework/views/*.php';
 
+/* Identidade visual — ver docs/specs/05-identidade-visual.md */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
-    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+    --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
         'Segoe UI Symbol', 'Noto Color Emoji';
+    --font-mono: 'JetBrains Mono', 'SF Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+    --color-true-dark: #0D0D0D;
+    --color-surface: #1A1A1A;
+    --color-pure-light: #FAFAFA;
+    --color-light-surface: #EEEEEE;
+    --color-matrix-green: #00FF66;
+    --color-deep-green: #00AA44;
+
+    /*
+     * Tokens semânticos (claro por padrão, `.dark` na raiz sobrescreve abaixo) — docs/specs/
+     * 05-identidade-visual.md §6/§8. Registrados dentro de @theme (não só em :root) para o
+     * Tailwind gerar utilities (`bg-canvas`, `text-ink`, etc.) que já respondem à variante
+     * `dark:` automaticamente. `.dark` ainda não é aplicado por padrão em nenhuma tela; é a base
+     * para quando isso for decidido, sem precisar reabrir cada componente depois.
+     */
+    --color-canvas: var(--color-pure-light);
+    --color-panel: var(--color-light-surface);
+    --color-ink: var(--color-true-dark);
+    --color-accent: var(--color-deep-green);
+    --color-accent-ink: #FFFFFF;
+}
+
+.dark {
+    --color-canvas: var(--color-true-dark);
+    --color-panel: var(--color-surface);
+    --color-ink: #FFFFFF;
+    --color-accent: var(--color-matrix-green);
+    --color-accent-ink: var(--color-true-dark);
+}
+
+/*
+ * Vue Flow (editor visual, docs/specs/03-editor-visual.md) lê estas variáveis globalmente —
+ * ponto de conexão do nó e a linha "sendo arrastada" ao criar uma transição usam o acento da
+ * marca em vez do azul padrão da lib. Ver docs/specs/05-identidade-visual.md §7.3.
+ */
+:root {
+    --vf-handle: var(--color-accent);
+    --vf-connection-path: var(--color-accent);
 }
