@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, toRaw } from 'vue';
+import { ref, computed, watch, toRaw } from 'vue';
 import { Head, router } from '@inertiajs/vue3';
 import { VueFlow, useVueFlow } from '@vue-flow/core';
 import { Background } from '@vue-flow/background';
@@ -8,6 +8,8 @@ import { route } from 'ziggy-js';
 import axios from 'axios';
 import ActivityNode from '@/Components/Workflow/ActivityNode.vue';
 import StepNode from '@/Components/Workflow/StepNode.vue';
+import AiRefineModal from '@/Components/Workflow/AiRefineModal.vue';
+import AppNav from '@/Components/AppNav.vue';
 
 const props = defineProps({
     workflow: { type: Object, required: true },
@@ -25,6 +27,16 @@ const edges = ref(structuredClone(toRaw(props.graph.edges)));
 const selected = ref(null); // { kind: 'step' | 'activity' | 'transition', id: number }
 const publishing = ref(false);
 const publishErrors = ref([]);
+const showAiModal = ref(false);
+
+watch(
+    () => props.graph,
+    (newGraph) => {
+        nodes.value = structuredClone(toRaw(newGraph.nodes));
+        edges.value = structuredClone(toRaw(newGraph.edges));
+    },
+    { deep: true },
+);
 
 const { onConnect: onVueFlowConnect } = useVueFlow();
 
@@ -68,6 +80,15 @@ async function onNodeDragStop({ node }) {
     } else {
         await axios.patch(route('workflow-activities.update', node.data.id), position);
     }
+}
+
+async function onStepResizeEnd({ id, width, height, positionX, positionY }) {
+    await axios.patch(route('workflow-steps.update', id), {
+        width,
+        height,
+        position_x: positionX,
+        position_y: positionY,
+    });
 }
 
 async function addStep() {
@@ -128,10 +149,17 @@ onVueFlowConnect(async ({ source, target }) => {
     const fromId = dbIdFromNodeId(source);
     const toId = dbIdFromNodeId(target);
 
+    // Uma transição saindo de um nó de Decisão quase sempre é um caminho exclusivo, não um
+    // fork paralelo — nascer como "always" obriga o usuário a lembrar de trocar pra
+    // "expression" manualmente, e esquecer disso é o motivo mais comum dos erros de
+    // pareamento fork/join no publish (WorkflowGraphValidator::validateForkJoinPairing).
+    const sourceNode = nodes.value.find((n) => n.id === source);
+    const conditionType = sourceNode?.data?.type === 'condition' ? 'expression' : 'always';
+
     const { data } = await axios.post(route('workflow-transitions.store', [props.workflow.id, props.version.id]), {
         from_activity_id: fromId,
         to_activity_id: toId,
-        condition_type: 'always',
+        condition_type: conditionType,
         sort_order: 0,
     });
 
@@ -140,7 +168,7 @@ onVueFlowConnect(async ({ source, target }) => {
         source,
         target,
         label: null,
-        data: { id: data.id, conditionType: 'always', conditionExpression: null, sortOrder: 0 },
+        data: { id: data.id, conditionType, conditionExpression: null, sortOrder: 0 },
     });
     selected.value = { kind: 'transition', id: data.id };
 });
@@ -161,16 +189,40 @@ async function updateActivity(patch) {
 
     await axios.patch(route('workflow-activities.update', activity.data.id), patch);
     Object.assign(activity.data, patch);
-    if (patch.type) activity.type = patch.type;
 
-    if ('assigneeRoleId' in patch) {
-        const role = props.roles.find((r) => r.id === patch.assigneeRoleId);
+    if ('assignee_type' in patch) {
+        activity.data.assigneeType = patch.assignee_type;
+        if (!patch.assignee_type) {
+            activity.data.assigneeRoleId = null;
+            activity.data.assigneeRoleName = null;
+            activity.data.assigneeUserId = null;
+            activity.data.assigneeUserName = null;
+        }
+    }
+
+    if ('assignee_role_id' in patch || 'assigneeRoleId' in patch) {
+        const roleId = patch.assignee_role_id ?? patch.assigneeRoleId;
+        activity.data.assigneeRoleId = roleId;
+        const role = props.roles.find((r) => r.id === roleId);
         activity.data.assigneeRoleName = role?.name ?? null;
+        if (roleId) {
+            activity.data.assigneeUserId = null;
+            activity.data.assigneeUserName = null;
+        }
     }
-    if ('assigneeUserId' in patch) {
-        const user = props.users.find((u) => u.id === patch.assigneeUserId);
+
+    if ('assignee_user_id' in patch || 'assigneeUserId' in patch) {
+        const userId = patch.assignee_user_id ?? patch.assigneeUserId;
+        activity.data.assigneeUserId = userId;
+        const user = props.users.find((u) => u.id === userId);
         activity.data.assigneeUserName = user?.name ?? null;
+        if (userId) {
+            activity.data.assigneeRoleId = null;
+            activity.data.assigneeRoleName = null;
+        }
     }
+
+    if (patch.type) activity.type = patch.type;
 }
 
 async function updateTransition(patch) {
@@ -211,7 +263,10 @@ function publish() {
         {},
         {
             onError: (errors) => {
-                publishErrors.value = errors.graph ?? ['Não foi possível publicar.'];
+                // `errors.graph` pode vir como string (achatado pelo Inertia) ou array
+                // (mensagens do WorkflowGraphValidator) — nunca iterar sem normalizar
+                // pra array, senão um v-for sobre string quebra caractere por caractere.
+                publishErrors.value = errors.graph ? [].concat(errors.graph) : ['Não foi possível publicar.'];
             },
             onFinish: () => {
                 publishing.value = false;
@@ -225,6 +280,8 @@ function publish() {
     <Head :title="`Editar ${workflow.name}`" />
 
     <div class="flex h-screen flex-col bg-canvas">
+        <AppNav active="workflows" />
+
         <header class="flex items-center justify-between border-b border-ink/10 bg-panel px-4 py-2">
             <div>
                 <h1 class="text-sm font-semibold text-ink">{{ workflow.name }}</h1>
@@ -233,14 +290,22 @@ function publish() {
             <div class="flex items-center gap-2">
                 <button
                     type="button"
-                    class="rounded border border-ink/15 px-3 py-1 text-xs font-medium text-ink hover:bg-ink/5"
+                    class="flex items-center gap-1.5 rounded-lg border border-accent/30 bg-accent/10 px-3 py-1.5 text-xs font-semibold text-accent transition-colors hover:bg-accent/20"
+                    @click="showAiModal = true"
+                >
+                    <span>✨</span>
+                    <span>Ajustar com IA</span>
+                </button>
+                <button
+                    type="button"
+                    class="rounded-lg border border-ink/10 px-3 py-1.5 text-xs font-semibold text-ink transition-colors hover:bg-ink/5"
                     @click="addStep"
                 >
                     + Etapa
                 </button>
                 <button
                     type="button"
-                    class="rounded bg-accent px-3 py-1 text-xs font-medium text-accent-ink hover:opacity-90 disabled:opacity-50"
+                    class="rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-accent-ink transition-opacity hover:opacity-90 disabled:opacity-50"
                     :disabled="publishing"
                     @click="publish"
                 >
@@ -250,9 +315,9 @@ function publish() {
         </header>
 
         <div v-if="errorIssues.length || warningIssues.length || publishErrors.length" class="border-b border-ink/10 bg-panel px-4 py-2 text-xs">
-            <p v-for="(msg, i) in publishErrors" :key="`pub-${i}`" class="text-red-600">{{ msg }}</p>
-            <p v-for="issue in errorIssues" :key="issue.code + issue.activityIds.join(',')" class="text-red-600">⛔ {{ issue.message }}</p>
-            <p v-for="issue in warningIssues" :key="issue.code + issue.activityIds.join(',')" class="text-amber-600">⚠️ {{ issue.message }}</p>
+            <p v-for="(msg, i) in publishErrors" :key="`pub-${i}`" class="text-danger">{{ msg }}</p>
+            <p v-for="issue in errorIssues" :key="issue.code + issue.activityIds.join(',')" class="text-danger">⛔ {{ issue.message }}</p>
+            <p v-for="issue in warningIssues" :key="issue.code + issue.activityIds.join(',')" class="text-warning">⚠️ {{ issue.message }}</p>
         </div>
 
         <div class="flex flex-1 overflow-hidden">
@@ -260,7 +325,7 @@ function publish() {
                 <VueFlow
                     v-model:nodes="nodes"
                     v-model:edges="edges"
-                    :default-viewport="graph.viewport ?? { zoom: 1, x: 0, y: 0 }"
+                    fit-view-on-init
                     @node-click="onNodeClick"
                     @edge-click="onEdgeClick"
                     @pane-click="onPaneClick"
@@ -270,7 +335,7 @@ function publish() {
                     <Controls />
 
                     <template #node-step="nodeProps">
-                        <StepNode v-bind="nodeProps" @add-activity="addActivity" />
+                        <StepNode v-bind="nodeProps" @add-activity="addActivity" @resize-end="onStepResizeEnd" />
                     </template>
                     <template #node-task="nodeProps">
                         <ActivityNode v-bind="nodeProps" />
@@ -290,40 +355,40 @@ function publish() {
             <aside v-if="selected" class="w-80 overflow-y-auto border-l border-ink/10 bg-panel p-4 text-sm">
                 <div v-if="selectedStep">
                     <h2 class="mb-2 font-semibold text-ink">Etapa</h2>
-                    <label class="mb-2 block text-xs text-ink">
+                    <label class="aresta-label mb-3">
                         Nome
                         <input
-                            class="mt-1 w-full rounded border border-ink/15 bg-canvas px-2 py-1 text-ink"
+                            class="aresta-input mt-1"
                             :value="selectedStep.data.name"
                             @change="updateStep({ name: $event.target.value })"
                         />
                     </label>
-                    <label class="mb-2 block text-xs text-ink">
+                    <label class="aresta-label mb-3">
                         SLA (dias)
                         <input
                             type="number"
-                            class="mt-1 w-full rounded border border-ink/15 bg-canvas px-2 py-1 text-ink"
+                            class="aresta-input mt-1"
                             :value="selectedStep.data.slaDays"
                             @change="updateStep({ sla_days: $event.target.value ? Number($event.target.value) : null })"
                         />
                     </label>
-                    <button type="button" class="mt-2 text-xs text-red-600 hover:underline" @click="deleteSelected">Excluir etapa</button>
+                    <button type="button" class="mt-2 text-xs text-danger hover:underline" @click="deleteSelected">Excluir etapa</button>
                 </div>
 
                 <div v-else-if="selectedActivity">
                     <h2 class="mb-2 font-semibold text-ink">Atividade</h2>
-                    <label class="mb-2 block text-xs text-ink">
+                    <label class="aresta-label mb-3">
                         Nome
                         <input
-                            class="mt-1 w-full rounded border border-ink/15 bg-canvas px-2 py-1 text-ink"
+                            class="aresta-input mt-1"
                             :value="selectedActivity.data.name"
                             @change="updateActivity({ name: $event.target.value })"
                         />
                     </label>
-                    <label class="mb-2 block text-xs text-ink">
+                    <label class="aresta-label mb-3">
                         Tipo
                         <select
-                            class="mt-1 w-full rounded border border-ink/15 bg-canvas px-2 py-1 text-ink"
+                            class="aresta-input mt-1"
                             :value="selectedActivity.data.type"
                             @change="updateActivity({ type: $event.target.value })"
                         >
@@ -335,10 +400,10 @@ function publish() {
                     </label>
 
                     <template v-if="['task', 'form'].includes(selectedActivity.data.type)">
-                        <label class="mb-2 block text-xs text-ink">
+                        <label class="aresta-label mb-3">
                             Responsável
                             <select
-                                class="mt-1 w-full rounded border border-ink/15 bg-canvas px-2 py-1 text-ink"
+                                class="aresta-input mt-1"
                                 :value="selectedActivity.data.assigneeType ?? ''"
                                 @change="updateActivity({ assignee_type: $event.target.value || null })"
                             >
@@ -347,31 +412,31 @@ function publish() {
                                 <option value="user">Usuário</option>
                             </select>
                         </label>
-                        <label v-if="selectedActivity.data.assigneeType === 'role'" class="mb-2 block text-xs text-ink">
+                        <label v-if="selectedActivity.data.assigneeType === 'role'" class="aresta-label mb-3">
                             Papel
                             <select
-                                class="mt-1 w-full rounded border border-ink/15 bg-canvas px-2 py-1 text-ink"
+                                class="aresta-input mt-1"
                                 :value="selectedActivity.data.assigneeRoleId ?? ''"
                                 @change="updateActivity({ assignee_role_id: Number($event.target.value) })"
                             >
                                 <option v-for="role in roles" :key="role.id" :value="role.id">{{ role.name }}</option>
                             </select>
                         </label>
-                        <label v-if="selectedActivity.data.assigneeType === 'user'" class="mb-2 block text-xs text-ink">
+                        <label v-if="selectedActivity.data.assigneeType === 'user'" class="aresta-label mb-3">
                             Usuário
                             <select
-                                class="mt-1 w-full rounded border border-ink/15 bg-canvas px-2 py-1 text-ink"
+                                class="aresta-input mt-1"
                                 :value="selectedActivity.data.assigneeUserId ?? ''"
                                 @change="updateActivity({ assignee_user_id: Number($event.target.value) })"
                             >
                                 <option v-for="user in users" :key="user.id" :value="user.id">{{ user.name }}</option>
                             </select>
                         </label>
-                        <label class="mb-2 block text-xs text-ink">
+                        <label class="aresta-label mb-3">
                             SLA (horas)
                             <input
                                 type="number"
-                                class="mt-1 w-full rounded border border-ink/15 bg-canvas px-2 py-1 text-ink"
+                                class="aresta-input mt-1"
                                 :value="selectedActivity.data.slaHours"
                                 @change="updateActivity({ sla_hours: $event.target.value ? Number($event.target.value) : null })"
                             />
@@ -379,10 +444,10 @@ function publish() {
                     </template>
 
                     <template v-if="selectedActivity.data.type === 'automated_action'">
-                        <label class="mb-2 block text-xs text-ink">
+                        <label class="aresta-label mb-3">
                             Ação
                             <select
-                                class="mt-1 w-full rounded border border-ink/15 bg-canvas px-2 py-1 text-ink"
+                                class="aresta-input mt-1"
                                 :value="selectedActivity.data.config?.action ?? ''"
                                 @change="updateActivity({ config: { ...selectedActivity.data.config, action: $event.target.value } })"
                             >
@@ -391,10 +456,10 @@ function publish() {
                                 <option value="generate_document">Gerar documento</option>
                             </select>
                         </label>
-                        <label v-if="selectedActivity.data.config?.action === 'webhook'" class="mb-2 block text-xs text-ink">
+                        <label v-if="selectedActivity.data.config?.action === 'webhook'" class="aresta-label mb-3">
                             URL
                             <input
-                                class="mt-1 w-full rounded border border-ink/15 bg-canvas px-2 py-1 text-ink"
+                                class="aresta-input mt-1"
                                 :value="selectedActivity.data.config?.url ?? ''"
                                 @change="updateActivity({ config: { ...selectedActivity.data.config, url: $event.target.value, method: selectedActivity.data.config?.method ?? 'POST' } })"
                             />
@@ -420,23 +485,23 @@ function publish() {
                         </label>
                     </div>
 
-                    <button type="button" class="mt-2 text-xs text-red-600 hover:underline" @click="deleteSelected">Excluir atividade</button>
+                    <button type="button" class="mt-2 text-xs text-danger hover:underline" @click="deleteSelected">Excluir atividade</button>
                 </div>
 
                 <div v-else-if="selectedTransition">
                     <h2 class="mb-2 font-semibold text-ink">Transição</h2>
-                    <label class="mb-2 block text-xs text-ink">
+                    <label class="aresta-label mb-3">
                         Rótulo
                         <input
-                            class="mt-1 w-full rounded border border-ink/15 bg-canvas px-2 py-1 text-ink"
+                            class="aresta-input mt-1"
                             :value="selectedTransition.label ?? ''"
                             @change="updateTransition({ label: $event.target.value || null })"
                         />
                     </label>
-                    <label class="mb-2 block text-xs text-ink">
+                    <label class="aresta-label mb-3">
                         Tipo
                         <select
-                            class="mt-1 w-full rounded border border-ink/15 bg-canvas px-2 py-1 text-ink"
+                            class="aresta-input mt-1"
                             :value="selectedTransition.data.conditionType"
                             @change="updateTransition({ condition_type: $event.target.value })"
                         >
@@ -450,19 +515,19 @@ function publish() {
                             Condição simples: campo, operador e valor — para combinar várias condições, edite via API por
                             enquanto (fora do escopo do MVP do builder visual).
                         </p>
-                        <label class="mb-2 block text-xs text-ink">
+                        <label class="aresta-label mb-3">
                             Campo
                             <input
-                                class="mt-1 w-full rounded border border-ink/15 bg-canvas px-2 py-1 text-ink"
+                                class="aresta-input mt-1"
                                 placeholder="context.valor_proposta"
                                 :value="selectedTransition.data.conditionExpression?.field ?? ''"
                                 @change="updateTransition({ condition_expression: { ...selectedTransition.data.conditionExpression, field: $event.target.value } })"
                             />
                         </label>
-                        <label class="mb-2 block text-xs text-ink">
+                        <label class="aresta-label mb-3">
                             Operador
                             <select
-                                class="mt-1 w-full rounded border border-ink/15 bg-canvas px-2 py-1 text-ink"
+                                class="aresta-input mt-1"
                                 :value="selectedTransition.data.conditionExpression?.operator ?? '='"
                                 @change="updateTransition({ condition_expression: { ...selectedTransition.data.conditionExpression, operator: $event.target.value } })"
                             >
@@ -474,20 +539,27 @@ function publish() {
                                 <option value="<=">&lt;= menor ou igual</option>
                             </select>
                         </label>
-                        <label class="mb-2 block text-xs text-ink">
+                        <label class="aresta-label mb-3">
                             Valor
                             <input
-                                class="mt-1 w-full rounded border border-ink/15 bg-canvas px-2 py-1 text-ink"
+                                class="aresta-input mt-1"
                                 :value="selectedTransition.data.conditionExpression?.value ?? ''"
                                 @change="updateTransition({ condition_expression: { ...selectedTransition.data.conditionExpression, value: $event.target.value } })"
                             />
                         </label>
                     </template>
 
-                    <button type="button" class="mt-2 text-xs text-red-600 hover:underline" @click="deleteSelected">Excluir transição</button>
+                    <button type="button" class="mt-2 text-xs text-danger hover:underline" @click="deleteSelected">Excluir transição</button>
                 </div>
             </aside>
         </div>
+
+        <AiRefineModal
+            :show="showAiModal"
+            :workflow="workflow"
+            :version="version"
+            @close="showAiModal = false"
+        />
     </div>
 </template>
 
