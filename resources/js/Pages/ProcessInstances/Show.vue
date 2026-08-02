@@ -6,6 +6,7 @@ import { Background } from '@vue-flow/background';
 import { Controls } from '@vue-flow/controls';
 import ActivityNode from '@/Components/Workflow/ActivityNode.vue';
 import StepNode from '@/Components/Workflow/StepNode.vue';
+import AppNav from '@/Components/AppNav.vue';
 
 const props = defineProps({
     instance: { type: Object, required: true },
@@ -32,6 +33,8 @@ const edges = computed(() =>
     <Head :title="`Acompanhar ${instance.name}`" />
 
     <div class="flex h-screen flex-col bg-canvas">
+        <AppNav active="instances" />
+
         <header class="flex items-center justify-between border-b border-ink/10 bg-panel px-4 py-2">
             <div>
                 <h1 class="text-sm font-semibold text-ink">{{ instance.name }}</h1>
