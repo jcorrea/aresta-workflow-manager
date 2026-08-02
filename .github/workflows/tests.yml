@@ -18,8 +18,22 @@ jobs:
           extensions: pdo, pdo_sqlite, mbstring, bcmath, gd, zip, intl
           coverage: none
 
-      - name: Instalar dependências
+      - name: Instalar dependências PHP
         run: composer install --no-interaction --prefer-dist --no-progress
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Instalar dependências Node
+        run: npm ci
+
+      # Necessário mesmo em teste: app.blade.php usa @vite(...), e qualquer teste que
+      # renderize uma página Inertia (Home, Login, Workflows, editor, ...) recebe 500
+      # (ViteManifestNotFoundException) sem public/build/manifest.json existir.
+      - name: Build dos assets (Vite)
+        run: npm run build
 
       - name: Preparar .env
         run: |
