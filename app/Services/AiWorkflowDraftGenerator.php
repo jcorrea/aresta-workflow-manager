@@ -76,6 +76,10 @@ class AiWorkflowDraftGenerator
         // WorkflowGraphValidator quando o editor abrir; a pessoa só completa a seta que faltou.
         $raw['transitions'] = $this->filterResolvableTransitions($raw);
 
+        // Identifica e cadastra os papéis citados ANTES de montar o grafo (não mais durante),
+        // mutando cada activity com o assignee já resolvido — ver resolveActivityAssignees().
+        $raw['steps'] = $this->resolveActivityAssignees($raw['steps'], $roles, $organization);
+
         $version = WorkflowVersion::create([
             'workflow_id' => $workflow->id,
             'status' => WorkflowVersionStatus::Draft,
@@ -99,14 +103,14 @@ class AiWorkflowDraftGenerator
             ]);
 
             foreach ($step['activities'] as $actIndex => $activity) {
-                ['type' => $assigneeType, 'role_id' => $assigneeRoleId] = $this->resolveAssignee($activity, $roles, $organization);
-
+                // assignee_type/assignee_role_id já vêm resolvidos por resolveActivityAssignees()
+                // — nenhuma criação/match de papel acontece mais aqui na montagem.
                 $newActivity = WorkflowActivity::create([
                     'workflow_step_id' => $newStep->id,
                     'name' => $activity['name'],
                     'type' => $activity['type'],
-                    'assignee_type' => $assigneeType,
-                    'assignee_role_id' => $assigneeRoleId,
+                    'assignee_type' => $activity['assignee_type'],
+                    'assignee_role_id' => $activity['assignee_role_id'],
                     'assignee_user_id' => null, // nunca atribuído pela IA
                     'config' => $activity['config'] ?? [],
                     'sla_hours' => $activity['sla_hours'] ?? null,
@@ -153,10 +157,35 @@ class AiWorkflowDraftGenerator
     }
 
     /**
+     * Passe único de identificação/cadastro de papéis, ANTES da montagem do grafo (chamado
+     * logo após assertValidShape()/filterResolvableTransitions() em generate()) — não mais
+     * durante a criação de cada WorkflowActivity. Devolve $steps com cada activity já com
+     * 'assignee_type'/'assignee_role_id' finais, prontos pra WorkflowActivity::create() só ler
+     * (sem match/criação de papel misturado na montagem).
+     *
+     * @param  array<int, array<string, mixed>>  $steps
+     * @param  Collection<int, Role>  $roles
+     * @return array<int, array<string, mixed>>
+     */
+    protected function resolveActivityAssignees(array $steps, Collection $roles, Organization $organization): array
+    {
+        foreach ($steps as &$step) {
+            foreach ($step['activities'] as &$activity) {
+                ['type' => $assigneeType, 'role_id' => $assigneeRoleId] = $this->resolveAssignee($activity, $roles, $organization);
+
+                $activity['assignee_type'] = $assigneeType;
+                $activity['assignee_role_id'] = $assigneeRoleId;
+            }
+        }
+
+        return $steps;
+    }
+
+    /**
      * @param  Collection<int, Role>  $roles
      * @return array{type: ?string, role_id: ?int}
      */
-    protected function resolveAssignee(array $activity, Collection &$roles, Organization $organization): array
+    protected function resolveAssignee(array $activity, Collection $roles, Organization $organization): array
     {
         if (($activity['assignee_type'] ?? null) !== 'role') {
             if (empty($activity['assignee_role_id']) && empty($activity['assignee_role_name'])) {
@@ -172,14 +201,18 @@ class AiWorkflowDraftGenerator
             return ['type' => 'role', 'role_id' => (int) $roleId];
         }
 
-        // 2. Tenta por nome (case-insensitive) entre os papéis existentes
+        // 2. Tenta por nome (case-insensitive) entre os papéis existentes — inclui os que
+        //    resolveActivityAssignees() já cadastrou pra uma activity anterior nesta mesma
+        //    chamada, porque $roles é a mesma instância de Collection (push() abaixo muta o
+        //    objeto compartilhado; não precisa passar por referência).
         if ($roleName) {
             $existing = $roles->first(fn (Role $r) => mb_strtolower($r->name) === mb_strtolower($roleName));
             if ($existing) {
                 return ['type' => 'role', 'role_id' => $existing->id];
             }
 
-            // 3. Se o papel não existe na organização, cria o papel de negócio automaticamente
+            // 3. Se o papel não existe na organização, cadastra o papel de negócio já aqui —
+            //    na fase de identificação, não mais no meio da montagem do grafo.
             $newRole = Role::create([
                 'organization_id' => $organization->id,
                 'name' => $roleName,
