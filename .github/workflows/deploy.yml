@@ -1,0 +1,82 @@
+name: Deploy para Produção
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build & Deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      # ── 1. Checkout ──────────────────────────────────────────────────────────
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      # ── 2. PHP ───────────────────────────────────────────────────────────────
+      - name: Configurar PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: mbstring, pdo, pdo_mysql, opcache, xml, curl, zip
+          coverage: none
+
+      # ── 3. Dependências PHP ───────────────────────────────────────────────────
+      - name: Cache Composer
+        uses: actions/cache@v4
+        with:
+          path: vendor
+          key: composer-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-
+
+      - name: Instalar dependências PHP (sem dev)
+        run: composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist
+
+      # ── 4. Node / Assets ──────────────────────────────────────────────────────
+      - name: Configurar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Instalar dependências Node
+        run: npm ci
+
+      - name: Build dos assets (Vite)
+        run: npm run build
+
+      # ── 5. Deploy via SSH ─────────────────────────────────────────────────────
+      # SHARED HOSTING: sem sudo, sem restart de serviços.
+      # O script roda com o usuário da conta Hostinger (dono dos arquivos).
+      # A app fica em ~/aresta-workflow; o Document Root do subdomínio aponta
+      # para ~/aresta-workflow/public (configurado no hPanel).
+      - name: Deploy no servidor via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          script: |
+            bash ~/aresta-workflow/deploy.sh
+
+      # ── 6. Upload dos assets compilados ───────────────────────────────────────
+      # SHARED HOSTING: o servidor não tem Node — assets compilados no Actions
+      # são enviados por SCP direto para ~/aresta-workflow/public/build/.
+      - name: Sincronizar assets compilados (public/build)
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          source: "public/build"
+          target: ~/aresta-workflow/public/
+          strip_components: 1
