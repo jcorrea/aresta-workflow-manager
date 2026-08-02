@@ -84,12 +84,18 @@ trap '$PHP artisan up; echo "ERRO — modo de manutenção desativado automatica
 git pull origin main --ff-only
 
 # ── 4. Dependências PHP ───────────────────────────────────────────────────────
-# --no-scripts: shared hosting costuma desabilitar proc_open (disable_functions do
-# php.ini, por segurança) — sem isso, o Composer trava tentando rodar o script
-# 'post-autoload-dump' (@php artisan package:discover) como subprocesso, mesmo com
-# os pacotes já instalados com sucesso. Chamamos o package:discover manualmente
-# logo em seguida, dentro do próprio processo do artisan (não passa por proc_open).
-$PHP "$COMPOSER_BIN" install --no-dev --optimize-autoloader --no-interaction --prefer-dist --no-scripts
+# shared hosting costuma desabilitar proc_open (disable_functions do php.ini, por
+# segurança) — sem isso, o Composer trava tentando rodar o script 'post-autoload-dump'
+# (@php artisan package:discover) como subprocesso. --no-scripts deveria bastar, mas
+# nesse host o Composer instalado ignora a flag e tenta rodar o hook mesmo assim (só
+# esse hook falha — os pacotes já foram baixados e o autoload já foi gerado antes
+# disso, "Nothing to install" + "Generating optimized autoload files" já rodaram).
+# Por isso não confiamos só na flag: se o composer falhar, seguimos assim mesmo e
+# rodamos o package:discover manualmente (dentro do processo do artisan, sem
+# proc_open) — só falha de verdade se isso aqui também falhar.
+if ! $PHP "$COMPOSER_BIN" install --no-dev --optimize-autoloader --no-interaction --prefer-dist --no-scripts; then
+  echo "AVISO: composer install saiu com erro (esperado se for só o hook post-autoload-dump por causa do proc_open desabilitado — seguindo com package:discover manual)."
+fi
 $PHP artisan package:discover --ansi
 
 # ── 5. Migrations ─────────────────────────────────────────────────────────────
