@@ -130,6 +130,16 @@ Carregar `Inter` e `JetBrains Mono` via `@fonts`/Google Fonts (mesmo mecanismo u
 `Instrument Sans`, ou self-host se preferir evitar dependência externa — decidir em `04-integracao-
 e-notificacoes.md` não se aplica aqui, é puramente uma escolha de build, ver item aberto §10).
 
+> **Nota de implementação (já executada em parte, ver §9)**: `resources/css/app.css` implementa o
+> bloco `@theme` acima com os tokens literais (`--color-true-dark` etc.) intactos, mas os tokens
+> *semânticos* de §6 foram registrados com nomes diferentes dos deste documento —
+> `--color-canvas`/`--color-panel`/`--color-ink`/`--color-accent`/`--color-accent-ink` no lugar de
+> `--color-bg`/`--color-surface-app`/`--color-text`/`--color-accent`, e registrados dentro do
+> próprio bloco `@theme` (não só em `:root`/`.dark`) para o Tailwind gerar utilities (`bg-canvas`,
+> `text-ink`, `bg-panel`) que já respondem à variante `dark:` automaticamente, via
+> `@custom-variant dark (&:where(.dark, .dark *))`. `app.css` é a fonte da verdade para os nomes
+> exatos — este documento descreve a intenção semântica, não o identificador literal.
+
 ## 7. Aplicação por superfície
 
 ### 7.1 Shell geral (`resources/views/app.blade.php`)
@@ -189,6 +199,40 @@ Vite/Tailwind. Trocar por: fundo `true-dark`, card `surface`, logo `aresta-logo-
 título, botão "Entrar com Microsoft" com acento `matrix-green`. Baixo risco — tela isolada, sem
 lógica além do link SSO.
 
+### 7.6 Menu de navegação e perfil do usuário (avatar Microsoft)
+
+Estrutura de referência: `~/Documents/Projects/aresta.dev/resources/views/status/partials/
+navbar.blade.php` — cabeçalho `sticky top-0`, fundo `its-black`/`true-dark`, logo à esquerda,
+ações à direita (toggle de tema + avatar do usuário com dropdown por hover/focus). Replicar essa
+estrutura aqui, com uma diferença deliberada: **usar a foto real do Microsoft (`avatar_url`, já
+capturado no login SSO — ver `771aa1c`), não só iniciais** — o `aresta.dev` cai em iniciais porque
+não tem avatar de provedor OAuth disponível; aqui temos, então é a opção com mais fidelidade visual
+e a que já está parcialmente implementada em `resources/views/home.blade.php` (padrão a reaproveitar,
+não a reinventar):
+
+```blade
+@if (auth()->user()->avatar_url)
+    <img class="avatar" src="{{ auth()->user()->avatar_url }}" alt="">
+@else
+    <div class="avatar-fallback">{{ strtoupper(substr(auth()->user()->name, 0, 1)) }}</div>
+@endif
+```
+
+**Implementado.** `resources/js/Components/UserMenu.vue` (avatar `avatar_url`/fallback de iniciais,
+dropdown hover/focus com nome, e-mail e "Sair" via `router.post(route('logout'))`) e
+`resources/js/Components/ThemeToggle.vue` (alterna `.dark` na raiz, persiste em `localStorage` na
+chave `aresta-workflow-theme`) são montados em `AppNav.vue`, logo depois dos links de navegação —
+mesma posição relativa do `navbar.blade.php`. `resources/views/app.blade.php` ganhou a mesma IIFE
+de detecção de tema do `aresta.dev` (§7.1) no `<head>`, para não piscar o tema errado antes do Vue
+montar. `home.blade.php` deixou de ter CSS inline com hex literal e passou a carregar
+`@vite(['resources/css/app.css'])`, usando os tokens semânticos (`bg-canvas`, `bg-panel`,
+`text-ink`, `bg-accent`) e as duas variantes do logo (`aresta-logo-black.svg` claro/
+`aresta-logo.svg` escuro, alternadas via `dark:hidden`/`dark:block`) — como é uma view Blade fora
+da SPA Inertia, o toggle ali é um script vanilla idêntico ao do `aresta.dev`, não o componente Vue,
+mas lê/escreve a mesma chave de `localStorage`, então o tema escolhido persiste entre a tela inicial
+e o resto do produto. `auth.user` nas shared props do Inertia
+(`app/Http/Middleware/HandleInertiaRequests.php`) passou a incluir `avatar_url`.
+
 ## 8. Modo claro/escuro — qual é o padrão
 
 O manual chama o dark de **"modo nativo"** e o claro de **"modo alternativo"** (§04 do PDF,
@@ -202,29 +246,71 @@ Isso é uma mudança de comportamento perceptível para qualquer usuário atual 
 Fases 0-6 já estão implementadas e testadas (scaffold, modelo de dados, motor de execução, editor
 visual, inbox/notificações, API externa, acompanhamento read-only). Esta é a primeira mudança que
 toca *todas* as telas já existentes sem adicionar funcionalidade nova — puramente cor, tipografia,
-logo, favicon. Ordem sugerida de execução, do menor para o maior raio de impacto:
+logo, favicon, e (adicionado nesta revisão, §7.6) estrutura de menu/perfil. Ordem sugerida de
+execução, do menor para o maior raio de impacto:
 
-1. Tokens base (`app.css`, favicon, cópia dos SVGs de logo) — não quebra nada, é aditivo.
-2. Filament (`AdminPanelProvider`) — uma tela de configuração central, baixo risco.
-3. Login SSO — tela isolada.
-4. Páginas Inertia gerais (listagens/Inbox/ProcessInstances) — reskin mecânico.
-5. Editor visual Vue Flow — o item mais delicado (§7.3), porque mexe em legibilidade funcional já
+1. Tokens base (`app.css`, favicon, cópia dos SVGs de logo) — não quebra nada, é aditivo. **Feito.**
+2. Filament (`AdminPanelProvider`) — uma tela de configuração central, baixo risco. **Feito.**
+3. Login SSO — tela isolada. **Feito.**
+4. Tela pós-login (`home.blade.php`) e navegação entre Workflows/Instâncias/Inbox — **Feito**,
+   incluindo o dropdown de perfil/avatar e o toggle de tema de §7.6.
+5. Páginas Inertia gerais (listagens/Inbox/ProcessInstances) — reskin mecânico, incluindo o
+   dropdown de perfil (§7.6) no `AppNav.vue` compartilhado. **Feito.**
+6. Editor visual Vue Flow — o item mais delicado (§7.3), porque mexe em legibilidade funcional já
    validada, não só em cor decorativa; fazer por último e testar com um grafo real de cada tipo de
-   nó antes de considerar concluído.
+   nó antes de considerar concluído. **Feito** (`ActivityNode.vue`/`StepNode.vue` já usam os tokens
+   semânticos — `border-accent`, `bg-panel`, `text-ink` etc. — no lugar das 4 hues antigas).
+
+Fase 7 completa: todos os itens de escopo (§1-§7.6) implementados e verificados manualmente
+(build de produção, suíte de testes, e navegação real via login de desenvolvimento — avatar
+Microsoft, dropdown, toggle de tema persistindo entre `home.blade.php` e as páginas Inertia, e
+logout). Os itens em aberto remanescentes (§10) são decisões de produto, não trabalho pendente.
+
+## 9.1 Alinhamento ao starter kit (2026-07-25)
+
+A pedido do usuário, o visual foi realinhado à reformulação mais recente do brandbook, publicada no
+`aresta_starter_kit` (`~/Documents/Projects/aresta_starter_kit/docs/brand/` — `tokens.css`,
+`components/` e o RFC `2026-07-25-reformulacao-visual-componentes.md` de lá). O que mudou aqui:
+
+- **Dark por padrão** ("a Aresta é dark-native"): `app.blade.php`/`home.blade.php` aplicam `.dark`
+  quando não há escolha salva (antes caía no `prefers-color-scheme`), e o Filament ganhou
+  `->defaultThemeMode(ThemeMode::Dark)`. Resolve o primeiro item em aberto de §10.
+- **Cores de estado calibradas WCAG AA** (derivadas do kit, não do manual): `--color-danger`/
+  `--color-warning`/`--color-success` semânticos por tema em `app.css` (claro `#B42318`/`#854D0E`/
+  `#00702E`; escuro `#F97066`/`#FACC15`/Matrix Green), mais os crus `*-raw` para fundos/bordas.
+  Substituem os `red-600`/`amber-*` genéricos nas páginas Vue e resolvem o item "cor de alerta/erro"
+  de §10.
+- **Escala de raios do kit** mapeada nos tokens do Tailwind (`rounded-lg` 12px = controles,
+  `rounded-xl` 16px = cards, `rounded-2xl` 20px = destaques/modais) e **sombras em duas camadas**
+  (`shadow-sm`/`shadow-lg` → `--aresta-shadow*`, calibradas por tema).
+- **Navbar sempre escura** (`AppNav.vue` + `ThemeToggle.vue` + `UserMenu.vue`): fundo Surface UI
+  fixo, sticky, verde só na interação, e-mail do dropdown em fonte mono, "Sair" em vermelho de
+  estado — só o conteúdo abaixo dela reage ao tema, como em `components/navbar.html`.
+- **Login no padrão `components/login.html`**: sempre escuro, glow radial verde discreto, card
+  20px com sombra ambiente, botão SSO translúcido que ganha borda verde no hover/foco, metadado
+  `sso://microsoft-entra-id` em mono.
+- **Scrollbar fina nas variáveis semânticas e anel de foco em halo translúcido** (em vez do
+  outline padrão) em `app.css`.
 
 ## 10. Itens em aberto
 
-- **Dark como padrão (§8)**: confirmar com o usuário se o produto deve abrir em modo escuro por
-  padrão (alinhado ao manual, "modo nativo") ou se mantém claro por padrão com dark como opção via
-  toggle — impacta Filament e todo o shell Inertia, não é um detalhe cosmético isolado.
-- **Paleta funcional do editor (§7.3)**: validar a proposta de trocar hue-por-tipo por forma+ícone
-  com o usuário antes de reimplementar `ActivityNode.vue` — é uma mudança de legibilidade para quem
-  já usa o editor, não só de marca; se a distinção por cor se provar necessária na prática (feedback
-  de uso real), preferir um segundo acento de baixa saturação a reintroduzir 4 hues saturadas.
-- **Cor de alerta/erro**: o manual não define uma cor de erro/aviso (só o acento verde) — precisa de
-  uma decisão explícita para SLA vencido, validação de grafo com erro (`03-editor-visual.md` §6) e
-  estados de falha em geral. Proposta: um vermelho neutro fora da paleta de marca (ex. `#EF4444`,
-  já comum em UI de erro), usado com moderação, não como um "segundo acento" da marca.
+- **Dark como padrão (§8)**: ~~confirmar com o usuário~~ **Resolvido em §9.1** — o produto abre em
+  modo escuro por padrão, seguindo o starter kit ("a Aresta é dark-native"); o claro permanece via
+  toggle, persistido por usuário.
+- **Paleta funcional do editor (§7.3)**: já implementada (`ActivityNode.vue`/`StepNode.vue` nos
+  tokens semânticos, ver §9) — validar com uso real se a distinção por forma+ícone (sem hue por
+  tipo de nó) continua legível na prática; se não se provar suficiente, preferir um segundo acento
+  de baixa saturação a reintroduzir 4 hues saturadas.
+- **Seletor de organização no menu**: o `aresta.dev` tem um trocador de contexto no header (dropdown
+  de "quadro" em `navbar.blade.php`, linhas 11-27) para usuário com acesso a mais de um quadro. Este
+  produto tem o equivalente estrutural — um usuário pode pertencer a mais de uma `Organization`
+  (`home.blade.php` já lista todas em `<ul class="orgs">`, mas é só exibição, sem trocar contexto
+  ativo em nenhuma tela depois do login) — decidir com o usuário se `Workflows`/`ProcessInstances`/
+  `Inbox` precisam de um seletor de organização no menu (análogo ao seletor de quadro) ou se
+  cada usuário sempre está implicitamente numa única organização ativa e isso nunca vira UI.
+- **Cor de alerta/erro**: **Resolvido em §9.1** — adotadas as derivadas do starter kit (calibradas
+  por tema para AA: `#B42318`/`#F97066` erro, `#854D0E`/`#FACC15` aviso), usadas com moderação, não
+  como "segundo acento" da marca.
 - **Hospedagem de fonte**: `Inter`/`JetBrains Mono` via Google Fonts (like `aresta.dev` já faz para
   `Inter`) vs. self-host (`npm` + `@fontsource/*`, evita dependência de terceiro em produção) — decidir
   ao implementar §6, não bloqueia o resto da spec.

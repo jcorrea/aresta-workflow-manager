@@ -19,6 +19,16 @@
     --color-deep-green: #00AA44;
 
     /*
+     * Derivadas do starter kit (docs/brand/tokens.css do aresta_starter_kit) — o manual só
+     * define a matriz de 4 cores por modo; estas são as semânticas de estado calibradas por
+     * tema para contraste WCAG AA como texto. Os "crus" (`*-raw`) servem para fundos/bordas.
+     */
+    --color-danger-raw: #D92D20;
+    --color-danger-soft: #F97066;
+    --color-warning-raw: #CA8A04;
+    --color-warning-soft: #FACC15;
+
+    /*
      * Tokens semânticos (claro por padrão, `.dark` na raiz sobrescreve abaixo) — docs/specs/
      * 05-identidade-visual.md §6/§8. Registrados dentro de @theme (não só em :root) para o
      * Tailwind gerar utilities (`bg-canvas`, `text-ink`, etc.) que já respondem à variante
@@ -29,7 +39,30 @@
     --color-panel: var(--color-light-surface);
     --color-ink: var(--color-true-dark);
     --color-accent: var(--color-deep-green);
-    --color-accent-ink: #FFFFFF;
+    /* Ink Black sobre Deep Green (6.32:1) — branco fazia 3.07:1 e falhava AA (starter kit). */
+    --color-accent-ink: var(--color-true-dark);
+
+    /* Estado (texto) — valores do modo claro; `.dark` sobrescreve abaixo. */
+    --color-danger: #B42318;
+    --color-warning: #854D0E;
+    --color-success: #00702E;
+
+    /*
+     * Escala de raios do starter kit sobre os tokens padrão do Tailwind:
+     * rounded-lg = controles (12px), rounded-xl = cards (16px), rounded-2xl = destaques/modais (20px).
+     */
+    --radius-lg: 12px;
+    --radius-xl: 16px;
+    --radius-2xl: 20px;
+
+    /* Sombras em duas camadas (contato + ambiente), calibradas por tema em :root/.dark. */
+    --shadow-sm: var(--aresta-shadow);
+    --shadow-lg: var(--aresta-shadow-lg);
+}
+
+:root {
+    --aresta-shadow: 0 1px 2px rgba(0, 0, 0, 0.05), 0 6px 20px rgba(0, 0, 0, 0.06);
+    --aresta-shadow-lg: 0 2px 4px rgba(0, 0, 0, 0.05), 0 20px 48px rgba(0, 0, 0, 0.10);
 }
 
 .dark {
@@ -38,6 +71,128 @@
     --color-ink: #FFFFFF;
     --color-accent: var(--color-matrix-green);
     --color-accent-ink: var(--color-true-dark);
+    --color-danger: var(--color-danger-soft);
+    --color-warning: var(--color-warning-soft);
+    --color-success: var(--color-matrix-green);
+    --aresta-shadow: 0 1px 2px rgba(0, 0, 0, 0.30), 0 6px 20px rgba(0, 0, 0, 0.22);
+    --aresta-shadow-lg: 0 2px 4px rgba(0, 0, 0, 0.30), 0 20px 48px rgba(0, 0, 0, 0.34);
+}
+
+/*
+ * Barra de rolagem e anel de foco do starter kit (docs/brand/tokens.css): scrollbar fina nas
+ * variáveis semânticas (troca sozinha entre temas) e halo translúcido de foco em vez do
+ * outline padrão — mais visível pra navegação por teclado, sem "pular" o layout.
+ */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--color-ink) 15%, transparent) transparent;
+}
+
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background-color: color-mix(in srgb, var(--color-ink) 15%, transparent);
+    border-radius: 999px;
+}
+
+@layer base {
+    button,
+    [role="button"],
+    input[type="button"],
+    input[type="submit"],
+    input[type="reset"] {
+        cursor: pointer;
+    }
+
+    button:disabled,
+    [role="button"][aria-disabled="true"],
+    input[type="button"]:disabled,
+    input[type="submit"]:disabled,
+    input[type="reset"]:disabled {
+        cursor: not-allowed;
+    }
+
+    input:focus-visible,
+    select:focus-visible,
+    textarea:focus-visible,
+    button:focus-visible {
+        outline: none;
+        border-color: var(--color-accent);
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 25%, transparent);
+    }
+}
+
+/*
+ * Classes de formulário do starter kit (tokens.css de lá: .aresta-label/.aresta-input/
+ * .aresta-error-text), portadas para os tokens semânticos deste projeto — usar estas em vez
+ * de estilizar campo a campo. Nos labels que envolvem o campo (padrão deste projeto), o peso
+ * 600 do label não vaza para o campo porque .aresta-input fixa o próprio peso/tamanho.
+ */
+@layer components {
+    .aresta-label {
+        display: block;
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--color-ink);
+        margin-bottom: 6px;
+    }
+
+    .aresta-input {
+        width: 100%;
+        box-sizing: border-box;
+        border-radius: 10px;
+        border: 1px solid color-mix(in srgb, var(--color-ink) 12%, transparent);
+        padding: 10px 14px;
+        font-size: 14px;
+        font-weight: 400;
+        font-family: inherit;
+        color: var(--color-ink);
+        background: var(--color-panel);
+        transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .aresta-error-text {
+        margin-top: 4px;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--color-danger);
+    }
+
+    .aresta-badge {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        padding: 2px 10px;
+        font-size: 12px;
+        font-weight: 600;
+    }
+
+    .aresta-badge--success {
+        background: color-mix(in srgb, var(--color-success) 15%, transparent);
+        color: var(--color-success);
+    }
+
+    .aresta-badge--warning {
+        background: color-mix(in srgb, var(--color-warning) 15%, transparent);
+        color: var(--color-warning);
+    }
+
+    .aresta-badge--danger {
+        background: color-mix(in srgb, var(--color-danger) 15%, transparent);
+        color: var(--color-danger);
+    }
+
+    .aresta-badge--neutral {
+        background: color-mix(in srgb, var(--color-ink) 10%, transparent);
+        color: color-mix(in srgb, var(--color-ink) 70%, transparent);
+    }
 }
 
 /*

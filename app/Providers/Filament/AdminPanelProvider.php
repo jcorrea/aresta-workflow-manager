@@ -2,6 +2,7 @@
 
 namespace App\Providers\Filament;
 
+use Filament\Enums\ThemeMode;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -32,6 +33,8 @@ class AdminPanelProvider extends PanelProvider
             ->darkModeBrandLogo(asset('img/aresta-logo.svg'))
             ->brandLogoHeight('1.75rem')
             ->favicon(asset('img/favicon.svg'))
+            // A Aresta é dark-native (starter kit): escuro por padrão, claro como alternativa.
+            ->defaultThemeMode(ThemeMode::Dark)
             ->colors([
                 'primary' => Color::hex('#00FF66'),
             ])
