@@ -23,8 +23,14 @@ set -euo pipefail
 
 # ── Configuração ──────────────────────────────────────────────────────────────
 APP_DIR=~/aresta-workflow
-PHP="php"   # Na Hostinger shared, 'php' aponta para a versão configurada no hPanel.
-            # Se precisar de versão específica: /usr/local/bin/php8.3
+
+# Caminhos absolutos, não nomes soltos ('php'/'composer') — a sessão SSH não-interativa
+# que o GitHub Actions abre (appleboy/ssh-action) não carrega ~/.bashrc/.bash_profile
+# do mesmo jeito que uma sessão interativa, e pode resolver um PHP diferente do que
+# 'php -v' mostra quando você testa manualmente logado por SSH. Confirme com
+# 'which php' / 'which composer' numa sessão interativa e ajuste aqui se mudar.
+PHP=/usr/bin/php
+COMPOSER_BIN=/usr/local/bin/composer
 
 cd "$APP_DIR"
 
@@ -78,9 +84,13 @@ trap '$PHP artisan up; echo "ERRO — modo de manutenção desativado automatica
 git pull origin main --ff-only
 
 # ── 4. Dependências PHP ───────────────────────────────────────────────────────
-# SHARED HOSTING: 'composer' geralmente está no PATH do SSH da Hostinger.
-# Se não estiver: use 'php composer.phar' com o composer.phar na raiz do projeto.
-composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist
+# --no-scripts: shared hosting costuma desabilitar proc_open (disable_functions do
+# php.ini, por segurança) — sem isso, o Composer trava tentando rodar o script
+# 'post-autoload-dump' (@php artisan package:discover) como subprocesso, mesmo com
+# os pacotes já instalados com sucesso. Chamamos o package:discover manualmente
+# logo em seguida, dentro do próprio processo do artisan (não passa por proc_open).
+$PHP "$COMPOSER_BIN" install --no-dev --optimize-autoloader --no-interaction --prefer-dist --no-scripts
+$PHP artisan package:discover --ansi
 
 # ── 5. Migrations ─────────────────────────────────────────────────────────────
 $PHP artisan migrate --force
