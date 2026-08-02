@@ -112,6 +112,13 @@ $PHP artisan route:cache
 $PHP artisan view:cache
 $PHP artisan event:cache
 
+# 'composer install' roda com --no-scripts (ver comentário acima), então o hook
+# post-autoload-dump que normalmente chama 'filament:upgrade' (e publica os
+# assets do painel — JS/CSS/fontes — em public/{js,css,fonts}/filament) nunca
+# roda em produção. 'filament:optimize' NÃO publica assets, só cacheia
+# componentes/ícones — sem este passo as pastas de asset do Filament ficam
+# vazias/desatualizadas e as telas do /admin quebram com 404.
+$PHP artisan filament:assets
 $PHP artisan filament:optimize
 
 # ── 7. Permissões ─────────────────────────────────────────────────────────────
