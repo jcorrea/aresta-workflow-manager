@@ -27,6 +27,12 @@ implementados. Ver a spec completa em [`docs/specs/`](docs/specs/), começando p
   builder de condição, modo de acompanhamento.
 - [`docs/specs/04-integracao-e-notificacoes.md`](docs/specs/04-integracao-e-notificacoes.md) —
   permissões, notificações, API para sistemas externos.
+- [`docs/specs/05-identidade-visual.md`](docs/specs/05-identidade-visual.md) — identidade visual
+  (herdada do brandbook do `aresta.dev`): cores, tipografia, logo.
+- [`docs/specs/06-refinamento-ia-editor.md`](docs/specs/06-refinamento-ia-editor.md) — refinamento
+  e edição de workflows assistidos por Inteligência Artificial no editor visual.
+- [`docs/manual-editor-visual.md`](docs/manual-editor-visual.md) — manual de uso do editor visual
+  (não é spec, é o "como usar" pra quem for desenhar um processo).
 
 ## Stack
 
@@ -37,7 +43,7 @@ implementados. Ver a spec completa em [`docs/specs/`](docs/specs/), começando p
 - Filament 5 (back-office administrativo, `/admin`)
 - Laravel Socialite + SSO Microsoft (Azure AD/Entra ID) — única forma de login, sem tela própria do
   Filament
-- Laravel Sanctum (API para sistemas externos) — **ainda não instalado**, chega na Fase 5
+- Laravel Sanctum (pacote instalado; endpoints da API para sistemas externos chegam na Fase 5)
 - `spatie/laravel-permission`, com o recurso de *teams* mapeado para `organization_id` (RBAC
   administrativo escopado por organização — `workflow-admin`/`editor`/`viewer`/`platform-staff`)
 - Ambiente de dev via Podman, sem exigir PHP no host — mesmo padrão do outro projeto da suíte Aresta
@@ -55,6 +61,7 @@ podman build -t aresta-workflow-php -f .docker/php/Containerfile .
 
 cp .env.example .env   # preencha AZURE_CLIENT_ID/AZURE_CLIENT_SECRET/AZURE_TENANT_ID
 ./bin/composer install
+./bin/artisan key:generate
 
 # banco MySQL de dev + a própria app, via docker-compose (rede compartilhada entre os dois)
 docker compose up -d app mysql
@@ -68,8 +75,18 @@ do compose — úteis para tudo que não precisa do MySQL, como testes, Pint ou 
 - `bin/artisan` — roda `php artisan ...` dentro do container (`bin/artisan test`, por exemplo, roda
   contra SQLite em memória e não precisa do MySQL do compose)
 - `bin/php` — roda `php ...` dentro do container
+- `bin/pint` — roda o Laravel Pint (`./vendor/bin/pint`) para formatação de código
 - `bin/serve` — sobe `php artisan serve` isolado (sem o MySQL do compose — útil só para checagens
   rápidas que não tocam banco; para o fluxo completo, prefira `docker compose up -d app mysql`)
+
+### Assets e Frontend (Vite)
+
+Para instalar as dependências de frontend e rodar o servidor de desenvolvimento do Vite:
+
+```bash
+npm install
+npm run dev
+```
 
 Se preferir um PHP 8.3+ já instalado no host (com as extensões acima), pode ignorar os scripts
 `bin/*` e rodar `composer`/`php artisan` diretamente.
