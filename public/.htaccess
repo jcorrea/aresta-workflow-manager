@@ -1,3 +1,12 @@
+# Força PHP 8.3 nesse subdomínio — o hPanel só deixa escolher a versão do PHP por
+# site/subdomínio "de verdade"; como aresta-workflow.acertars.com.br é uma pasta
+# dentro de outro domínio (não um subdomínio cadastrado como site próprio), o
+# Apache cai na versão padrão da conta (mais antiga que 8.3), e o Composer
+# rejeita as dependências do Laravel 13. Confirme o nome exato do handler em
+# hPanel → Avançado → Configuração do PHP (varia entre contas: x-httpd-php83,
+# x-httpd-alt-php83, etc.) — ajuste a linha abaixo se não for esse.
+AddHandler application/x-httpd-php83 .php
+
 <IfModule mod_rewrite.c>
     <IfModule mod_negotiation.c>
         Options -MultiViews -Indexes
