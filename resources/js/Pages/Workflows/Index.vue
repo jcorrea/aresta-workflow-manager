@@ -96,7 +96,7 @@ function confirmDelete() {
                 </button>
             </div>
 
-            <Modal :show="showFormModal" @close="closeModal">
+            <Modal :show="showFormModal" maxWidth="2xl" @close="closeModal">
                 <div class="mb-5 flex items-center justify-between">
                     <h2 class="text-lg font-bold text-ink">Novo Workflow</h2>
                     <button
@@ -130,7 +130,7 @@ function confirmDelete() {
                         Descrição <span class="font-normal text-ink/50">(opcional)</span>
                         <textarea
                             v-model="form.description"
-                            rows="3"
+                            rows="6"
                             class="aresta-input mt-1.5"
                             placeholder="Ex.: processo de aprovação de reembolso de despesas, do envio do recibo até o pagamento."
                         ></textarea>
