@@ -14,6 +14,14 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // Sem isso, atrás do proxy reverso da Hostinger (termina HTTPS e repassa pro
+        // PHP-FPM por HTTP puro) o Laravel acha que todo request é HTTP — quebra scheme
+        // em URLs geradas e, mais grave, o fluxo de OAuth (SSO Microsoft): o cookie de
+        // sessão sai marcado incorretamente e o state do /auth/azure/callback nunca bate
+        // com o de /auth/azure/redirect (InvalidStateException). '*' porque a Hostinger
+        // não documenta um IP fixo de proxy pra confiar especificamente.
+        $middleware->trustProxies(at: '*');
+
         $middleware->web(append: [
             HandleInertiaRequests::class,
         ]);
