@@ -16,7 +16,16 @@ class AzureController extends Controller
         // for cacheada por um proxy/CDN, tentativas seguintes reusam uma URL com state
         // velho, que nunca bate com o da sessão atual e derruba o login com
         // InvalidStateException (mesmo cuidado do GIITS Status).
-        return Socialite::driver('microsoft')->redirect()
+        //
+        // `prompt=select_account`: o logout daqui (`/logout`) só derruba a sessão do
+        // Laravel, nunca a sessão SSO da própria Microsoft (cookie em
+        // login.microsoftonline.com). Sem esse parâmetro, um login seguinte — seja após
+        // logout explícito ou após a sessão local expirar sozinha — reautentica em
+        // silêncio com a sessão SSO ainda viva, sem nunca mostrar a tela de escolha de
+        // conta da Microsoft.
+        return Socialite::driver('microsoft')
+            ->with(['prompt' => 'select_account'])
+            ->redirect()
             ->header('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     }
 
