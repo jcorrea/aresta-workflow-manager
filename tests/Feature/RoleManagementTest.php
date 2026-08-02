@@ -51,7 +51,7 @@ class RoleManagementTest extends TestCase
         // Auth::user(), e não estamos logando ninguém aqui).
         $names = Role::withoutGlobalScopes()->where('organization_id', $organization->id)->pluck('name')->all();
 
-        foreach (['Solicitante', 'Gestor', 'Aprovador', 'Financeiro', 'RH', 'Diretoria'] as $expected) {
+        foreach (Role::DEFAULT_NAMES as $expected) {
             $this->assertContains($expected, $names);
         }
     }

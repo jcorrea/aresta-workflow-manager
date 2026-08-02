@@ -20,6 +20,13 @@ class Role extends Model
     /** @use HasFactory<RoleFactory> */
     use BelongsToOrganization, HasFactory;
 
+    /**
+     * Ponto de partida editável pra organização nova (OrganizationObserver) e pro comando
+     * app:seed-default-domain-roles (organização já existente) — mesma lista nos dois
+     * lugares, não uma cópia solta em cada um.
+     */
+    public const DEFAULT_NAMES = ['Solicitante', 'Gestor', 'Aprovador', 'Financeiro', 'RH', 'Diretoria'];
+
     protected $fillable = ['organization_id', 'name', 'active'];
 
     protected function casts(): array
