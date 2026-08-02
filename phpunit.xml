@@ -32,5 +32,15 @@
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>
+        <!-- AiWorkflowDraftGenerator tenta o primeiro provedor "configurado" (services.php).
+             Sem isto, um .env de dev com chaves reais preenchidas faz os testes tentarem
+             chamadas HTTP de verdade em vez de usar Http::fake() — cada teste liga de volta só
+             o provedor que precisa via config(). -->
+        <env name="OLLAMA_URL" value=""/>
+        <env name="AZURE_OPENAI_ENDPOINT" value=""/>
+        <env name="AZURE_OPENAI_API_KEY" value=""/>
+        <env name="AZURE_OPENAI_DEPLOYMENT" value=""/>
+        <env name="GEMINI_API_KEY" value=""/>
+        <env name="OPENROUTER_API_KEY" value=""/>
     </php>
 </phpunit>

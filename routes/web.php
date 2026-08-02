@@ -52,11 +52,13 @@ Route::middleware('auth')->group(function () {
     Route::get('/workflows', [WorkflowController::class, 'index'])->name('workflows.index');
     Route::post('/workflows', [WorkflowController::class, 'store'])->name('workflows.store');
     Route::get('/workflows/{workflow}', [WorkflowController::class, 'show'])->name('workflows.show');
+    Route::delete('/workflows/{workflow}', [WorkflowController::class, 'destroy'])->name('workflows.destroy');
     Route::post('/workflows/{workflow}/rollback', [WorkflowController::class, 'rollback'])->name('workflows.rollback');
 
     Route::post('/workflows/{workflow}/versions', [WorkflowVersionController::class, 'store'])->name('workflows.versions.store');
     Route::get('/workflows/{workflow}/versions/{version}/edit', [WorkflowVersionController::class, 'edit'])->name('workflows.versions.edit');
     Route::post('/workflows/{workflow}/versions/{version}/publish', [WorkflowVersionController::class, 'publish'])->name('workflows.versions.publish');
+    Route::post('/workflows/{workflow}/versions/{version}/refine-ai', [WorkflowVersionController::class, 'refineWithAi'])->name('workflows.versions.refine-ai');
 
     Route::post('/workflows/{workflow}/versions/{version}/steps', [WorkflowStepController::class, 'store'])->name('workflow-steps.store');
     Route::patch('/workflow-steps/{step}', [WorkflowStepController::class, 'update'])->name('workflow-steps.update');

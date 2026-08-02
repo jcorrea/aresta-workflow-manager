@@ -52,4 +52,13 @@ class WorkflowPolicy
         return $user->isPlatformStaff()
             || $user->hasOrganizationRole($workflow->organization_id, OrganizationRole::Admin->value);
     }
+
+    /**
+     * Excluir workflow — só `workflow-admin`.
+     */
+    public function delete(User $user, Workflow $workflow): bool
+    {
+        return $user->isPlatformStaff()
+            || $user->hasOrganizationRole($workflow->organization_id, OrganizationRole::Admin->value);
+    }
 }

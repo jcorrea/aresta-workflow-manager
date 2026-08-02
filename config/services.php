@@ -42,4 +42,31 @@ return [
         'tenant' => env('AZURE_TENANT_ID', 'common'),
     ],
 
+    'ollama' => [
+        'url' => env('OLLAMA_URL'),
+        'model' => env('OLLAMA_MODEL', 'llama3.2:1b'),
+    ],
+
+    'azure_openai' => [
+        'endpoint' => env('AZURE_OPENAI_ENDPOINT'),
+        'key' => env('AZURE_OPENAI_API_KEY'),
+        'deployment' => env('AZURE_OPENAI_DEPLOYMENT'),
+        'api_version' => env('AZURE_OPENAI_API_VERSION', '2024-08-01-preview'),
+    ],
+
+    'gemini' => [
+        'key' => env('GEMINI_API_KEY'),
+        'model' => env('GEMINI_MODEL', 'gemini-3.6-flash'),
+    ],
+
+    'openrouter' => [
+        'key' => env('OPENROUTER_API_KEY'),
+        'model' => env('OPENROUTER_MODEL', 'openai/gpt-oss-20b:free'),
+    ],
+
+    'anthropic' => [
+        'key' => env('ANTHROPIC_API_KEY'),
+        'model' => env('ANTHROPIC_MODEL', 'claude-sonnet-5'),
+    ],
+
 ];

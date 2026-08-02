@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use Illuminate\Support\Str;
 
 class Workflow extends Model
@@ -20,6 +21,11 @@ class Workflow extends Model
     public function versions(): HasMany
     {
         return $this->hasMany(WorkflowVersion::class);
+    }
+
+    public function instances(): HasManyThrough
+    {
+        return $this->hasManyThrough(ProcessInstance::class, WorkflowVersion::class);
     }
 
     public function currentPublishedVersion(): BelongsTo

@@ -19,10 +19,27 @@ services:
       DB_DATABASE: ${DB_DATABASE:-aresta_workflow}
       DB_USERNAME: ${DB_USERNAME:-aresta_workflow}
       DB_PASSWORD: ${DB_PASSWORD:-aresta_workflow}
+      # Ollama roda como serviço deste compose (ver `ollama` abaixo) — alcançado pelo nome do
+      # serviço na rede interna, mesmo padrão do DB_HOST acima.
+      OLLAMA_URL: http://ollama:11434
     command: php artisan serve --host=0.0.0.0 --port=8000
     depends_on:
       mysql:
         condition: service_healthy
+    networks:
+      - aresta-workflow
+
+  # IA local (opcional) pra geração de rascunho de workflow — ver AiWorkflowDraftGenerator.
+  # Sobe vazio; rodar `docker compose exec ollama ollama pull llama3.2:1b` (ou o modelo
+  # escolhido em OLLAMA_MODEL) depois do primeiro `docker compose up`.
+  ollama:
+    image: docker.io/ollama/ollama:latest
+    container_name: aresta-workflow-ollama
+    restart: unless-stopped
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    volumes:
+      - aresta-workflow-ollama-data:/root/.ollama
     networks:
       - aresta-workflow
 
@@ -67,6 +84,7 @@ services:
 
 volumes:
   aresta-workflow-mysql-data:
+  aresta-workflow-ollama-data:
 
 networks:
   aresta-workflow:

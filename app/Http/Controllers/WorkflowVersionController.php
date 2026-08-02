@@ -9,6 +9,8 @@ use App\Models\Role;
 use App\Models\Workflow;
 use App\Models\WorkflowVersion;
 use App\Models\WorkflowVersionActivation;
+use App\Exceptions\WorkflowDraftRefusedException;
+use App\Services\AiWorkflowDraftRefiner;
 use App\Services\WorkflowGraphValidator;
 use App\Services\WorkflowVersionCloner;
 use Illuminate\Http\RedirectResponse;
@@ -39,6 +41,7 @@ class WorkflowVersionController extends Controller
             'workflow' => [
                 'id' => $workflow->id,
                 'name' => $workflow->name,
+                'description' => $workflow->description,
             ],
             'version' => [
                 'id' => $version->id,
@@ -58,6 +61,42 @@ class WorkflowVersionController extends Controller
                 ->get(['id', 'name']),
             'users' => $workflow->organization->users()->orderBy('name')->get(['users.id', 'users.name']),
         ]);
+    }
+
+    public function refineWithAi(
+        Request $request,
+        Workflow $workflow,
+        WorkflowVersion $version,
+        AiWorkflowDraftRefiner $refiner,
+    ): RedirectResponse {
+        Gate::authorize('update', $workflow);
+
+        abort_unless($version->workflow_id === $workflow->id, 404);
+        abort_unless($version->status === WorkflowVersionStatus::Draft, 422, 'Só é possível editar uma versão em rascunho.');
+
+        $data = $request->validate([
+            'description' => ['nullable', 'string', 'max:2000'],
+            'instructions' => ['required', 'string', 'max:2000'],
+        ]);
+
+        try {
+            DB::transaction(function () use ($refiner, $request, $workflow, $version, $data) {
+                $refiner->refine(
+                    organization: $workflow->organization,
+                    createdBy: $request->user(),
+                    workflow: $workflow,
+                    version: $version,
+                    updatedDescription: $data['description'] ?? null,
+                    instructions: $data['instructions'],
+                );
+            });
+        } catch (WorkflowDraftRefusedException $e) {
+            throw ValidationException::withMessages([
+                'instructions' => [$e->getMessage()],
+            ]);
+        }
+
+        return redirect()->route('workflows.versions.edit', [$workflow, $version]);
     }
 
     /**
