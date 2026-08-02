@@ -12,13 +12,17 @@ use App\Http\Controllers\WorkflowVersionController;
 use App\Models\User;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
+use Inertia\Inertia;
 
 Route::get('/login', function () {
     if (Auth::check()) {
         return redirect()->route('home');
     }
 
-    return view('auth.login');
+    return Inertia::render('Auth/Login', [
+        'appName' => config('app.name'),
+        'azureRedirectUrl' => route('azure.redirect'),
+    ]);
 })->name('login');
 
 Route::post('/logout', function () {
@@ -26,7 +30,9 @@ Route::post('/logout', function () {
     request()->session()->invalidate();
     request()->session()->regenerateToken();
 
-    return redirect()->route('login');
+    // Inertia::location força um redirecionamento completo do browser,
+    // necessário para sair do contexto SPA e limpar o estado da sessão.
+    return Inertia::location(route('login'));
 })->name('logout');
 
 Route::get('/auth/azure/redirect', [AzureController::class, 'redirect'])->name('azure.redirect');
@@ -46,7 +52,19 @@ if (app()->environment('local')) {
 
 Route::middleware('auth')->group(function () {
     Route::get('/', function () {
-        return view('home');
+        $user = request()->user()->load('organizations');
+        return Inertia::render('Home', [
+            'appName' => config('app.name'),
+            'user' => [
+                'name' => $user->name,
+                'email' => $user->email,
+                'avatar_url' => $user->avatar_url,
+            ],
+            'organizations' => $user->organizations->map(fn ($org) => [
+                'id' => $org->id,
+                'name' => $org->name,
+            ]),
+        ]);
     })->name('home');
 
     Route::get('/workflows', [WorkflowController::class, 'index'])->name('workflows.index');
