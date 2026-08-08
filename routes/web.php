@@ -20,7 +20,6 @@ Route::get('/login', function () {
     }
 
     return Inertia::render('Auth/Login', [
-        'appName' => config('app.name'),
         'azureRedirectUrl' => route('azure.redirect'),
     ]);
 })->name('login');
@@ -53,8 +52,8 @@ if (app()->environment('local')) {
 Route::middleware('auth')->group(function () {
     Route::get('/', function () {
         $user = request()->user()->load('organizations');
+
         return Inertia::render('Home', [
-            'appName' => config('app.name'),
             'user' => [
                 'name' => $user->name,
                 'email' => $user->email,
@@ -70,8 +69,10 @@ Route::middleware('auth')->group(function () {
     Route::get('/workflows', [WorkflowController::class, 'index'])->name('workflows.index');
     Route::post('/workflows', [WorkflowController::class, 'store'])->name('workflows.store');
     Route::get('/workflows/{workflow}', [WorkflowController::class, 'show'])->name('workflows.show');
+    Route::get('/workflows/{workflow}/integration-instructions', [WorkflowController::class, 'integrationInstructions'])->name('workflows.integration-instructions');
     Route::delete('/workflows/{workflow}', [WorkflowController::class, 'destroy'])->name('workflows.destroy');
     Route::post('/workflows/{workflow}/rollback', [WorkflowController::class, 'rollback'])->name('workflows.rollback');
+    Route::post('/workflows/{workflow}/instances', [ProcessInstanceController::class, 'store'])->name('process-instances.store');
 
     Route::post('/workflows/{workflow}/versions', [WorkflowVersionController::class, 'store'])->name('workflows.versions.store');
     Route::get('/workflows/{workflow}/versions/{version}/edit', [WorkflowVersionController::class, 'edit'])->name('workflows.versions.edit');

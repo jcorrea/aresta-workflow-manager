@@ -101,6 +101,12 @@ $PHP artisan package:discover --ansi
 # ── 5. Migrations ─────────────────────────────────────────────────────────────
 $PHP artisan migrate --force
 
+# Symlink de storage/app/public → public/storage — necessário pra logo/favicon enviados
+# em /admin/app-settings (App\Models\AppSetting, disco 'public') ficarem acessíveis via
+# HTTP. '--force' recria o link se já existir, pra não quebrar deploys seguintes (o
+# comando erra em "already exists" sem essa flag).
+$PHP artisan storage:link --force
+
 # ── 6. Limpar e re-otimizar caches ────────────────────────────────────────────
 $PHP artisan config:clear
 $PHP artisan route:clear

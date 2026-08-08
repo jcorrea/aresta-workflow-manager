@@ -151,12 +151,15 @@ Adotar o script de detecção de tema (`localStorage` + `prefers-color-scheme`, 
 
 ### 7.2 Painel Filament (`app/Providers/Filament/AdminPanelProvider.php`)
 
-- `->colors(['primary' => Color::hex('#00FF66')])` no lugar de `Color::Amber`. Como não há
-  branding por organização neste produto (§2), a cor é fixa no código, não vinda de um
-  `AppSetting` dinâmico como no `aresta.dev`.
+- `->colors(['primary' => Color::hex('#00FF66')])` no lugar de `Color::Amber`.
+  **Superado em 2026-08-07 (ver §11)**: a cor deixou de ser fixa no código — vem de
+  `App\Models\AppSetting` (singleton, instância inteira, não por organização), editável em
+  `/admin/app-settings`, caindo no `#00FF66` só quando o admin não customizou.
 - `->brandLogo(asset('img/aresta-logo-white.svg'))` (ou variante clara/escura conforme o tema do
-  painel) no lugar de só `->brandName('Aresta Workflow Manager')` sem logo.
-- `->favicon(asset('img/aresta-icon.svg'))`.
+  painel) no lugar de só `->brandName('Aresta Workflow Manager')` sem logo. **Superado em
+  2026-08-07 (ver §11)**: mesmo esquema — `AppSetting::logoUrl()` com fallback pro SVG da Aresta.
+- `->favicon(asset('img/aresta-icon.svg'))`. **Superado em 2026-08-07 (ver §11)**: idem,
+  `AppSetting::faviconUrl()` com fallback.
 - Avaliar se o painel Filament roda em dark mode por padrão (`->darkMode(true)` ou equivalente da
   versão do Filament em uso) para coerência com "modo nativo" do manual — ver item aberto §10.
 
@@ -314,7 +317,48 @@ A pedido do usuário, o visual foi realinhado à reformulação mais recente do 
 - **Hospedagem de fonte**: `Inter`/`JetBrains Mono` via Google Fonts (like `aresta.dev` já faz para
   `Inter`) vs. self-host (`npm` + `@fontsource/*`, evita dependência de terceiro em produção) — decidir
   ao implementar §6, não bloqueia o resto da spec.
-- **Branding por organização**: esta spec assume cor de marca fixa (§7.2), coerente com a decisão
+- **Branding por organização**: esta spec assumia cor de marca fixa (§7.2), coerente com a decisão
   fechada de que `organization_id` é fronteira de acesso, não de tema (`01-modelo-de-dados.md` §5).
-  Se no futuro surgir demanda de white-label por cliente (como o `accent_color` do GIITS Status),
-  isso é uma spec nova, não uma extensão silenciosa desta.
+  **Parcialmente superado em 2026-08-07 (ver §11)**: a pedido do usuário, nome/logo/favicon/cor
+  passaram a ser configuráveis — mas como um singleton **global de instância** (`AppSetting`,
+  igual a `AiProviderSetting`), não por `Organization`. White-label por organização-cliente
+  continua não implementado e, se demandado, ainda é spec nova — a distinção "fronteira de acesso,
+  não de tema" continua valendo para `organization_id` especificamente.
+
+## 11. Atualização 2026-08-07 — identidade configurável via `/admin/app-settings`
+
+A pedido do usuário, a marca deixou de ser fixa em código: `App\Models\AppSetting` (singleton,
+`id=1`, tabela `app_settings`) guarda `app_name`/`primary_color`/`logo_path`/`favicon_path`,
+editável em `/admin/app-settings` (`App\Filament\Pages\AppSettings`, restrito a `platform-staff` —
+mesmo critério de `OrganizationPolicy`, já que é config de instância inteira, não organizacional,
+ver item "Branding por organização" em §10). Sem customização, cai exatamente nos valores que esta
+spec definia como fixos (§3/§5/§7.2) — a mudança é aditiva, não uma remoção da identidade Aresta
+como padrão.
+
+Superfícies atualizadas:
+
+- **Filament (`AdminPanelProvider`)** — `brandName`/`brandLogo`/`darkModeBrandLogo`/`favicon`/
+  `colors.primary` lidos de `AppSetting::current()` a cada request, com fallback pros valores da
+  Aresta (§7.2).
+- **Produto inteiro (Inertia/Blade)** — decisão do usuário foi que a cor/nome também valem fora do
+  Filament, não só no painel administrativo:
+  - `app.blade.php` (raiz Inertia) resolve `<title>`, favicon e injeta um `<style>` sobrescrevendo
+    `--color-accent`/`--color-accent-ink` (tokens de §6/§8) **só quando `primary_color` não é
+    null** — ou seja, sem customização, o claro/escuro calibrado AA do starter kit (§9.1) continua
+    intacto; só passa a usar a cor do admin depois que ele efetivamente salva uma.
+  - `HandleInertiaRequests::share()` expõe `branding.app_name`/`branding.logo_url` pras páginas Vue
+    (`AppNav.vue`, `Home.vue`, `Auth/Login.vue`, `AppFooter.vue`), substituindo o `appName` que
+    antes vinha hardcoded de `config('app.name')` em cada controller.
+  - `AppNav.vue`/`ThemeToggle.vue` trocaram as classes literais `text-matrix-green`/
+    `border-matrix-green` (hue fixo da marca) por `text-accent`/`border-accent` (token semântico),
+    pra que o realce de navegação também responda à cor customizada — sem isso, o override de
+    `--color-accent` não alcançava a navbar.
+  - `Login.vue` trocou o hex literal `#00FF66` (glow de fundo, borda no hover) por
+    `var(--color-accent)`.
+- **Editor visual Vue Flow (§7.3)** — **não tocado deliberadamente**: as cores de estado de
+  execução (`completed`/`active` em `matrix-green`) continuam fixas na marca, porque ali a cor é
+  semântica de status ("sucesso"), não de identidade — customizar isso junto teria misturado dois
+  conceitos diferentes por trás do mesmo botão de "cor principal".
+
+Upload de logo/favicon usa o disco `public` (`storage/app/public` → `public/storage`, symlink via
+`php artisan storage:link --force`, adicionado ao `deploy.sh` e ao `README.md`).

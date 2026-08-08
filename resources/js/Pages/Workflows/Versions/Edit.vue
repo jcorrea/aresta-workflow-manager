@@ -225,6 +225,22 @@ async function updateActivity(patch) {
     if (patch.type) activity.type = patch.type;
 }
 
+function addActivityField() {
+    const fields = [...(selectedActivity.value.data.config?.fields ?? []), { key: '', label: '', type: 'text', required: false }];
+    updateActivity({ config: { ...selectedActivity.value.data.config, fields } });
+}
+
+function updateActivityField(index, patch) {
+    const fields = [...(selectedActivity.value.data.config?.fields ?? [])];
+    fields[index] = { ...fields[index], ...patch };
+    updateActivity({ config: { ...selectedActivity.value.data.config, fields } });
+}
+
+function removeActivityField(index) {
+    const fields = (selectedActivity.value.data.config?.fields ?? []).filter((_, i) => i !== index);
+    updateActivity({ config: { ...selectedActivity.value.data.config, fields } });
+}
+
 async function updateTransition(patch) {
     const transition = selectedTransition.value;
     if (!transition) return;
@@ -441,6 +457,50 @@ function publish() {
                                 @change="updateActivity({ sla_hours: $event.target.value ? Number($event.target.value) : null })"
                             />
                         </label>
+                    </template>
+
+                    <template v-if="selectedActivity.data.type === 'form'">
+                        <p class="aresta-label mb-2">Campos do formulário</p>
+                        <div
+                            v-for="(field, index) in selectedActivity.data.config?.fields ?? []"
+                            :key="index"
+                            class="mb-2 space-y-1.5 rounded-lg border border-ink/10 p-2"
+                        >
+                            <input
+                                class="aresta-input"
+                                placeholder="Chave (ex.: decisao)"
+                                :value="field.key"
+                                @change="updateActivityField(index, { key: $event.target.value })"
+                            />
+                            <input
+                                class="aresta-input"
+                                placeholder="Rótulo (ex.: Decisão)"
+                                :value="field.label"
+                                @change="updateActivityField(index, { label: $event.target.value })"
+                            />
+                            <div class="flex items-center gap-2">
+                                <select
+                                    class="aresta-input"
+                                    :value="field.type ?? 'text'"
+                                    @change="updateActivityField(index, { type: $event.target.value })"
+                                >
+                                    <option value="text">Texto</option>
+                                    <option value="number">Número</option>
+                                </select>
+                                <label class="flex items-center gap-1 text-xs text-ink/70">
+                                    <input
+                                        type="checkbox"
+                                        :checked="field.required"
+                                        @change="updateActivityField(index, { required: $event.target.checked })"
+                                    />
+                                    Obrigatório
+                                </label>
+                                <button type="button" class="text-xs text-danger hover:underline" @click="removeActivityField(index)">
+                                    Remover
+                                </button>
+                            </div>
+                        </div>
+                        <button type="button" class="mb-3 text-xs text-accent hover:underline" @click="addActivityField">+ Campo</button>
                     </template>
 
                     <template v-if="selectedActivity.data.type === 'automated_action'">

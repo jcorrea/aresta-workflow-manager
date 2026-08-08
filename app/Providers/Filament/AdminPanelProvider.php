@@ -2,6 +2,7 @@
 
 namespace App\Providers\Filament;
 
+use App\Models\AppSetting;
 use Filament\Enums\ThemeMode;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
@@ -24,19 +25,26 @@ class AdminPanelProvider extends PanelProvider
 {
     public function panel(Panel $panel): Panel
     {
+        // Identidade configurável via /admin/app-settings (App\Models\AppSetting) — substitui a
+        // marca Aresta fixa em código, decisão revista em 2026-08-07 (ver
+        // docs/specs/05-identidade-visual.md §2/§7.2/§10). Sem customização, cai nos valores da
+        // Aresta como antes.
+        $setting = AppSetting::current();
+        $customLogo = $setting->logoUrl();
+
         return $panel
             ->default()
             ->id('admin')
             ->path('admin')
-            ->brandName('Aresta Workflow Manager')
-            ->brandLogo(asset('img/aresta-logo-black.svg'))
-            ->darkModeBrandLogo(asset('img/aresta-logo.svg'))
+            ->brandName($setting->resolvedName())
+            ->brandLogo($customLogo ?? asset('img/aresta-logo-black.svg'))
+            ->darkModeBrandLogo($customLogo ?? asset('img/aresta-logo.svg'))
             ->brandLogoHeight('1.75rem')
-            ->favicon(asset('img/favicon.svg'))
+            ->favicon($setting->faviconUrl() ?? asset('img/favicon.svg'))
             // A Aresta é dark-native (starter kit): escuro por padrão, claro como alternativa.
             ->defaultThemeMode(ThemeMode::Dark)
             ->colors([
-                'primary' => Color::hex('#00FF66'),
+                'primary' => Color::hex($setting->resolvedPrimaryColor()),
             ])
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\Filament\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\Filament\Pages')

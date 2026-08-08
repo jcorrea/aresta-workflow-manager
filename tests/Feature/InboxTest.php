@@ -213,6 +213,37 @@ class InboxTest extends TestCase
         $this->assertSame(ProcessInstanceStatus::Completed, $instance->fresh()->status);
     }
 
+    /**
+     * A sidebar de tarefas do acompanhamento de instância (`ProcessInstances/Show.vue`) usa a
+     * mesma rota de conclusão do Inbox — `back()` faz o usuário voltar pra instância em vez de
+     * ser jogado pro Inbox quando a ação partiu de lá.
+     */
+    public function test_completing_from_the_instance_viewer_redirects_back_to_it_instead_of_the_inbox(): void
+    {
+        $me = User::factory()->create();
+        $this->org->users()->attach($me);
+
+        $instance = $this->makeInstance();
+        $workflowActivity = WorkflowActivity::factory()->for($this->step, 'workflowStep')->create([
+            'is_end' => true,
+            'assignee_type' => AssigneeType::User,
+            'assignee_user_id' => $me->id,
+        ]);
+        $activity = ProcessInstanceActivity::factory()->for($instance, 'processInstance')->for($workflowActivity, 'workflowActivity')->create([
+            'assigned_user_id' => $me->id,
+            'status' => ProcessInstanceActivityStatus::Pending,
+        ]);
+
+        $instanceUrl = route('process-instances.show', $instance->code);
+
+        $this->actingAs($me)
+            ->from($instanceUrl)
+            ->post(route('process-instance-activities.complete', $activity), ['result' => ['ok' => true]])
+            ->assertRedirect($instanceUrl);
+
+        $this->assertSame(ProcessInstanceActivityStatus::Completed, $activity->fresh()->status);
+    }
+
     public function test_workflow_admin_can_complete_on_behalf_of_the_assignee(): void
     {
         $assignee = User::factory()->create();

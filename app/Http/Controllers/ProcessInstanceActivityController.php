@@ -12,6 +12,12 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Notification;
 
+/**
+ * Assumir/concluir uma atividade — acionado tanto pelo Inbox ("Minhas tarefas") quanto pela
+ * sidebar de tarefas do acompanhamento de instância (`ProcessInstanceController::show`). Os dois
+ * pontos de entrada compartilham a mesma rota/policy; por isso os redirects usam `back()` em vez
+ * de uma rota fixa — cada um volta pra tela de onde veio.
+ */
 class ProcessInstanceActivityController extends Controller
 {
     public function claim(Request $request, ProcessInstanceActivity $activity): RedirectResponse
@@ -30,7 +36,7 @@ class ProcessInstanceActivityController extends Controller
             $this->notifyOtherEligibleUsers($activity, $request->user());
         }
 
-        return redirect()->route('inbox.index');
+        return redirect()->back(fallback: route('inbox.index'));
     }
 
     public function complete(Request $request, ProcessInstanceActivity $activity): RedirectResponse
@@ -48,7 +54,7 @@ class ProcessInstanceActivityController extends Controller
 
         app(WorkflowEngine::class)->completeActivity($activity, $data['result'] ?? []);
 
-        return redirect()->route('inbox.index');
+        return redirect()->back(fallback: route('inbox.index'));
     }
 
     private function notifyOtherEligibleUsers(ProcessInstanceActivity $activity, User $claimedBy): void

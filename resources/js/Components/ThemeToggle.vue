@@ -23,7 +23,7 @@ function toggle() {
         type="button"
         :aria-pressed="isDark"
         title="Alternar tema"
-        class="flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-white/5 text-white/80 transition-colors hover:border-matrix-green/45 hover:bg-white/10 hover:text-white focus-visible:border-matrix-green/45 focus-visible:outline-none"
+        class="flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-white/5 text-white/80 transition-colors hover:border-accent/45 hover:bg-white/10 hover:text-white focus-visible:border-accent/45 focus-visible:outline-none"
         @click="toggle"
     >
         <svg v-if="!isDark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="h-4 w-4">

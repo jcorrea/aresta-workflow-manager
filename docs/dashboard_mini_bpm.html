@@ -1,0 +1,817 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TI como Plataforma - Mini-BPM Enxuto Dashboard</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #DB002F;
+            --primary-hover: #ff1a47;
+            --primary-light: rgba(219, 0, 47, 0.15);
+            --bg-dark: #0b0f19;
+            --card-bg: #111827;
+            --card-border: #1f293d;
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
+            --accent-green: #10b981;
+            --sidebar-width: 260px;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            display: flex;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Sidebar Styling */
+        .sidebar {
+            width: var(--sidebar-width);
+            background-color: #080c14;
+            border-right: 1px solid var(--card-border);
+            display: flex;
+            flex-direction: column;
+            position: fixed;
+            height: 100vh;
+            z-index: 100;
+        }
+
+        .brand {
+            padding: 24px 20px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            border-bottom: 1px solid var(--card-border);
+        }
+
+        .brand-badge {
+            background-color: var(--primary);
+            color: white;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        .brand-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        .nav-menu {
+            list-style: none;
+            padding: 20px 10px;
+            flex-grow: 1;
+        }
+
+        .nav-item {
+            margin-bottom: 6px;
+        }
+
+        .nav-link {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            color: var(--text-muted);
+            text-decoration: none;
+            border-radius: 8px;
+            transition: all 0.2s ease;
+            cursor: pointer;
+            font-weight: 500;
+        }
+
+        .nav-link:hover, .nav-link.active {
+            background-color: var(--primary-light);
+            color: #fff;
+            border-left: 4px solid var(--primary);
+        }
+
+        .nav-link i {
+            font-size: 1.1rem;
+            width: 20px;
+            text-align: center;
+        }
+
+        /* Main Content Layout */
+        .main-content {
+            margin-left: var(--sidebar-width);
+            flex: 1;
+            padding: 30px;
+            max-width: calc(100vw - var(--sidebar-width));
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid var(--card-border);
+        }
+
+        .header-title h1 {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: #fff;
+            margin-bottom: 6px;
+        }
+
+        .header-title p {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+        }
+
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--accent-green);
+            padding: 6px 16px;
+            border-radius: 20px;
+            border: 1px solid rgba(16, 185, 129, 0.2);
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background-color: var(--accent-green);
+            border-radius: 50%;
+            box-shadow: 0 0 8px var(--accent-green);
+        }
+
+        /* Dashboard Overview Grid */
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .metric-card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 12px;
+            padding: 20px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            transition: transform 0.2s, border-color 0.2s;
+        }
+
+        .metric-card:hover {
+            transform: translateY(-2px);
+            border-color: var(--primary);
+        }
+
+        .metric-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 10px;
+            background-color: var(--primary-light);
+            color: var(--primary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.4rem;
+        }
+
+        .metric-data h3 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        .metric-data p {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        /* Tab Content Panels */
+        .tab-panel {
+            display: none;
+            animation: fadeIn 0.3s ease-in-out;
+        }
+
+        .tab-panel.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Content Cards & Sections */
+        .section-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 24px;
+        }
+
+        .full-width {
+            grid-column: span 2;
+        }
+
+        .dashboard-card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 20px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--card-border);
+        }
+
+        .card-header i {
+            color: var(--primary);
+            font-size: 1.2rem;
+        }
+
+        .card-header h2 {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #fff;
+        }
+
+        /* List Items & Components */
+        .problem-item {
+            display: flex;
+            gap: 16px;
+            padding: 16px;
+            background: rgba(255,255,255,0.02);
+            border-radius: 8px;
+            margin-bottom: 12px;
+            border-left: 3px solid var(--primary);
+        }
+
+        .problem-item i {
+            color: var(--primary);
+            font-size: 1.2rem;
+            margin-top: 2px;
+        }
+
+        .problem-item h4 {
+            color: #fff;
+            margin-bottom: 4px;
+            font-size: 0.95rem;
+        }
+
+        .problem-item p {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            line-height: 1.4;
+        }
+
+        /* Solution Cards Grid */
+        .solution-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+        }
+
+        .sol-card {
+            background: rgba(255,255,255,0.02);
+            border: 1px solid var(--card-border);
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+
+        .sol-card:hover {
+            border-color: var(--primary);
+            background: var(--primary-light);
+        }
+
+        .sol-icon {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: var(--primary);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 16px;
+            font-size: 1.2rem;
+        }
+
+        .sol-card h3 {
+            color: #fff;
+            font-size: 1rem;
+            margin-bottom: 8px;
+        }
+
+        .sol-card p {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            line-height: 1.4;
+        }
+
+        /* Financial Highlights */
+        .fin-badge {
+            background: var(--primary-light);
+            border: 1px solid var(--primary);
+            color: #fff;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .fin-badge .amount {
+            font-size: 2.5rem;
+            font-weight: 800;
+            color: var(--primary);
+            margin: 5px 0;
+        }
+
+        .feature-list {
+            list-style: none;
+        }
+
+        .feature-list li {
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            color: var(--text-main);
+            font-size: 0.9rem;
+        }
+
+        .feature-list li i {
+            color: var(--accent-green);
+        }
+
+        /* Roadmap Horizontal Timeline */
+        .timeline {
+            display: flex;
+            justify-content: space-between;
+            position: relative;
+            margin-top: 30px;
+            padding: 0 10px;
+        }
+
+        .timeline::before {
+            content: '';
+            position: absolute;
+            top: 24px;
+            left: 40px;
+            right: 40px;
+            height: 3px;
+            background: var(--card-border);
+            z-index: 1;
+        }
+
+        .timeline-step {
+            position: relative;
+            z-index: 2;
+            background: var(--card-bg);
+            padding: 0 10px;
+            text-align: center;
+            width: 22%;
+        }
+
+        .step-number {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: var(--card-bg);
+            border: 3px solid var(--primary);
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            margin: 0 auto 16px;
+            box-shadow: 0 0 12px rgba(219, 0, 47, 0.4);
+        }
+
+        .step-title {
+            color: #fff;
+            font-weight: 600;
+            font-size: 0.95rem;
+            margin-bottom: 6px;
+        }
+
+        .step-desc {
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            line-height: 1.3;
+        }
+
+        /* Interactive Modal / Detail View */
+        .interactive-box {
+            background: rgba(219, 0, 47, 0.05);
+            border: 1px border var(--primary);
+            padding: 16px;
+            border-radius: 8px;
+            margin-top: 16px;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            display: none;
+        }
+
+        .interactive-box.show {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Sidebar Navigation -->
+    <div class="sidebar">
+        <div class="brand">
+            <span class="brand-badge">PLATAFORMA</span>
+            <span class="brand-title">TI Corporativa</span>
+        </div>
+        <ul class="nav-menu">
+            <li class="nav-item">
+                <a class="nav-link active" onclick="switchTab('visao-geral', this)">
+                    <i class="fa-solid fa-chart-pie"></i>
+                    <span>Visão Geral</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" onclick="switchTab('desafios', this)">
+                    <i class="fa-solid fa-triangle-exclamation"></i>
+                    <span>Desafios Atuais</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" onclick="switchTab('solucao', this)">
+                    <i class="fa-solid fa-cubes"></i>
+                    <span>Solução Enxuta</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" onclick="switchTab('finops', this)">
+                    <i class="fa-solid fa-coins"></i>
+                    <span>Modelo Financeiro</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" onclick="switchTab('roadmap', this)">
+                    <i class="fa-solid fa-route"></i>
+                    <span>Roadmap</span>
+                </a>
+            </li>
+        </ul>
+    </div>
+
+    <!-- Main Content Area -->
+    <div class="main-content">
+        
+        <!-- Header -->
+        <div class="header">
+            <div class="header-title">
+                <h1>Mini-BPM Enxuto</h1>
+                <p>Eficiência operacional, governança descentralizada e custo marginal zero para a orquestração de processos.</p>
+            </div>
+            <div class="status-pill">
+                <div class="status-dot"></div>
+                <span>TI COMO PLATAFORMA</span>
+            </div>
+        </div>
+
+        <!-- Top Metrics -->
+        <div class="metrics-grid">
+            <div class="metric-card" onclick="switchTab('finops', document.querySelectorAll('.nav-link')[3])" style="cursor:pointer;">
+                <div class="metric-icon"><i class="fa-solid fa-dollar-sign"></i></div>
+                <div class="metric-data">
+                    <h3>R$ 0</h3>
+                    <p>Licenciamento / Usuário</p>
+                </div>
+            </div>
+            <div class="metric-card" onclick="switchTab('solucao', document.querySelectorAll('.nav-link')[2])" style="cursor:pointer;">
+                <div class="metric-icon"><i class="fa-solid fa-bolt"></i></div>
+                <div class="metric-data">
+                    <h3>Serverless</h3>
+                    <p>Azure Functions + Queues</p>
+                </div>
+            </div>
+            <div class="metric-card" onclick="switchTab('solucao', document.querySelectorAll('.nav-link')[2])" style="cursor:pointer;">
+                <div class="metric-icon"><i class="fa-solid fa-robot"></i></div>
+                <div class="metric-data">
+                    <h3>IA & No-Code</h3>
+                    <p>Criação Drag-and-Drop</p>
+                </div>
+            </div>
+            <div class="metric-card" onclick="switchTab('roadmap', document.querySelectorAll('.nav-link')[4])" style="cursor:pointer;">
+                <div class="metric-icon"><i class="fa-solid fa-list-check"></i></div>
+                <div class="metric-data">
+                    <h3>4 Fases</h3>
+                    <p>Roadmap de Execução</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 1: VISÃO GERAL -->
+        <div id="visao-geral" class="tab-panel active">
+            <div class="section-grid">
+                <div class="dashboard-card">
+                    <div class="card-header">
+                        <i class="fa-solid fa-bullseye"></i>
+                        <h2>Objetivo Estratégico</h2>
+                    </div>
+                    <p style="color: var(--text-muted); line-height: 1.6; margin-bottom: 16px;">
+                        Transformar a TI interna em uma **Engenharia de Plataforma de alto impacto**, fornecendo autonomia para os times de negócio e desenvolvedores cidadãos criarem fluxos de trabalho orquestrados, sem incorrer em custos expansivos de SaaS e sem criar dependências com ferramentas engessadas.
+                    </p>
+                    <div class="problem-item">
+                        <i class="fa-solid fa-check-circle" style="color: var(--accent-green);"></i>
+                        <div>
+                            <h4>Arquitetura Orientada a Eventos</h4>
+                            <p>Resiliência total com processamento assíncrono na nuvem Microsoft Azure.</p>
+                        </div>
+                    </div>
+                    <div class="problem-item">
+                        <i class="fa-solid fa-check-circle" style="color: var(--accent-green);"></i>
+                        <div>
+                            <h4>Visibilidade em Tempo Real</h4>
+                            <p>Métricas operacionais integradas nativamente ao Grafana e Power BI.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="dashboard-card">
+                    <div class="card-header">
+                        <i class="fa-solid fa-diagram-project"></i>
+                        <h2>Pilares do Mini-BPM</h2>
+                    </div>
+                    <div class="solution-grid" style="grid-template-columns: 1fr; gap: 12px;">
+                        <div class="sol-card" style="text-align: left; display: flex; align-items: center; gap: 16px;">
+                            <div class="sol-icon" style="margin: 0; min-width: 40px; height: 40px; font-size: 1rem;"><i class="fa-solid fa-plug"></i></div>
+                            <div>
+                                <h3>SDK Plug-and-Play</h3>
+                                <p>Integração em minutos via APIs leves para microsserviços e sistemas legados.</p>
+                            </div>
+                        </div>
+                        <div class="sol-card" style="text-align: left; display: flex; align-items: center; gap: 16px;">
+                            <div class="sol-icon" style="margin: 0; min-width: 40px; height: 40px; font-size: 1rem;"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
+                            <div>
+                                <h3>Modelagem via IA</h3>
+                                <p>Criação visual intuitiva com assistência de IA e versionamento seguro.</p>
+                            </div>
+                        </div>
+                        <div class="sol-card" style="text-align: left; display: flex; align-items: center; gap: 16px;">
+                            <div class="sol-icon" style="margin: 0; min-width: 40px; height: 40px; font-size: 1rem;"><i class="fa-solid fa-chart-line"></i></div>
+                            <div>
+                                <h3>FinOps & Serverless</h3>
+                                <p>Pagamento estritamente por consumo executado (Zero idle cost).</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="dashboard-card full-width" style="margin-top: 24px;">
+                <div class="card-header">
+                    <i class="fa-solid fa-compass"></i>
+                    <h2>Pilares Norteadores</h2>
+                </div>
+                <div class="solution-grid" style="grid-template-columns: repeat(4, 1fr);">
+                    <div class="sol-card">
+                        <div class="sol-icon"><i class="fa-solid fa-eye"></i></div>
+                        <h3>Visibilidade</h3>
+                        <p>Rastreabilidade e acompanhamento claro do status de cada processo, sem cobranças manuais.</p>
+                    </div>
+                    <div class="sol-card">
+                        <div class="sol-icon"><i class="fa-solid fa-sack-dollar"></i></div>
+                        <h3>Baixo Custo</h3>
+                        <p>Sem licenciamento por usuário e infraestrutura serverless com custo marginal zero.</p>
+                    </div>
+                    <div class="sol-card">
+                        <div class="sol-icon"><i class="fa-solid fa-feather"></i></div>
+                        <h3>Pouco Burocracia</h3>
+                        <p>Modelagem simples, acessível a administradores de negócio, sem depender de times de TI.</p>
+                    </div>
+                    <div class="sol-card">
+                        <div class="sol-icon"><i class="fa-solid fa-gauge-high"></i></div>
+                        <h3>Agilidade</h3>
+                        <p>Criação e publicação de fluxos em minutos, com iteração rápida sobre o desenho do processo.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 2: DESAFIOS ATUAIS -->
+        <div id="desafios" class="tab-panel">
+            <div class="section-grid">
+                <div class="dashboard-card">
+                    <div class="card-header">
+                        <i class="fa-solid fa-eye-slash"></i>
+                        <h2>Invisibilidade Operacional</h2>
+                    </div>
+                    <div class="problem-item">
+                        <i class="fa-solid fa-triangle-exclamation"></i>
+                        <div>
+                            <h4>Processos Espalhados</h4>
+                            <p>Fluxos críticos pulverizados em e-mails, planilhas informais e aplicativos isolados desenvolvidos por "devs cidadãos".</p>
+                        </div>
+                    </div>
+                    <div class="problem-item">
+                        <i class="fa-solid fa-clock"></i>
+                        <div>
+                            <h4>Falta de Rastreabilidade</h4>
+                            <p>Ausência de acompanhamento claro de aprovações, gerando gargalos operacionais ocultos e cobranças constantes de status.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="dashboard-card">
+                    <div class="card-header">
+                        <i class="fa-solid fa-hand-holding-dollar"></i>
+                        <h2>Custo & Complexidade Excessivos</h2>
+                    </div>
+                    <div class="problem-item">
+                        <i class="fa-solid fa-file-invoice-dollar"></i>
+                        <div>
+                            <h4>Licenciamento Padrão SaaS</h4>
+                            <p>Ferramentas tradicionais de mercado impõem altos custos por licença de usuário, inviabilizando o ganho de escala.</p>
+                        </div>
+                    </div>
+                    <div class="problem-item">
+                        <i class="fa-solid fa-box-open"></i>
+                        <div>
+                            <h4>Subaproveitamento Software</h4>
+                            <p>Sistemas corporativos engessados nos quais a empresa consome e utiliza apenas 5% das funcionalidades totais pagas.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 3: SOLUÇÃO ENXUTA -->
+        <div id="solucao" class="tab-panel">
+            <div class="dashboard-card full-width">
+                <div class="card-header">
+                    <i class="fa-solid fa-layer-group"></i>
+                    <h2>A Solução: Plataforma Enxuta de Orquestração</h2>
+                </div>
+                <div class="solution-grid">
+                    <div class="sol-card" onclick="toggleDetail('detail-sdk')">
+                        <div class="sol-icon"><i class="fa-solid fa-plug"></i></div>
+                        <h3>SDK Plug-and-Play</h3>
+                        <p>Integração via APIs leves em minutos para sistemas legados e projetos de devs cidadãos sem alterar o código existente.</p>
+                    </div>
+                    <div class="sol-card" onclick="toggleDetail('detail-ia')">
+                        <div class="sol-icon"><i class="fa-solid fa-robot"></i></div>
+                        <h3>Criação via IA & Drag-and-Drop</h3>
+                        <p>Modelagem visual intuitiva com apoio de IA e autonomia para os gestores, mantendo aprovação e versão sob controle.</p>
+                    </div>
+                    <div class="sol-card" onclick="toggleDetail('detail-obs')">
+                        <div class="sol-icon"><i class="fa-solid fa-chart-column"></i></div>
+                        <h3>Visibilidade em Tempo Real</h3>
+                        <p>Métricas de tempo de ciclo no Grafana e dashboards executivos de SLA diretamente integrados ao Power BI.</p>
+                    </div>
+                </div>
+
+                <!-- Interactive Detail Expanders -->
+                <div id="detail-sdk" class="interactive-box">
+                    <strong style="color:#fff;">Detalhes do SDK:</strong> Biblioteca leve compatível com pipelines de CI/CD (GitHub Actions), facilitando o encapsulamento de rotinas operacionais com idempotência e auditoria de estado.
+                </div>
+                <div id="detail-ia" class="interactive-box">
+                    <strong style="color:#fff;">Modelagem Inteligente:</strong> Permite que líderes de processos descrevam o fluxo em linguagem natural ou utilizem a interface drag-and-drop para compor etapas operacionais sem atrito.
+                </div>
+                <div id="detail-obs" class="interactive-box">
+                    <strong style="color:#fff;">Observabilidade Unificada:</strong> Emissão de eventos estruturados no formato OpenTelemetry/Azure Application Insights para acompanhamento de KPIs operacionais instantâneos.
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 4: FINOPS & ARQUITETURA -->
+        <div id="finops" class="tab-panel">
+            <div class="section-grid">
+                <div class="dashboard-card">
+                    <div class="fin-badge">
+                        <p>Custo em Licenciamento de Usuário</p>
+                        <div class="amount">R$ 0</div>
+                        <p>Escala com Custo Marginal Zero</p>
+                    </div>
+                    <ul class="feature-list">
+                        <li><i class="fa-solid fa-circle-check"></i> <strong>FinOps Nativo:</strong> Elimina a escalada de custos operacionais por adição de usuários.</li>
+                        <li><i class="fa-solid fa-circle-check"></i> <strong>Autonomia de TI:</strong> Valoriza o ecossistema e capacita os times internos.</li>
+                        <li><i class="fa-solid fa-circle-check"></i> <strong>ROI Imediato:</strong> Redução do TCO (Total Cost of Ownership) em mais de 80%.</li>
+                    </ul>
+                </div>
+
+                <div class="dashboard-card">
+                    <div class="card-header">
+                        <i class="fa-solid fa-cloud"></i>
+                        <h2>Arquitetura Cloud & Resiliência</h2>
+                    </div>
+                    <div class="problem-item" style="border-left-color: var(--accent-green);">
+                        <i class="fa-solid fa-server" style="color: var(--accent-green);"></i>
+                        <div>
+                            <h4>Arquitetura Serverless na Azure</h4>
+                            <p>Baseada em eventos (Azure Functions + Queue Storage), pagando apenas pelo processamento efetivo por segundo.</p>
+                        </div>
+                    </div>
+                    <div class="problem-item" style="border-left-color: var(--accent-green);">
+                        <i class="fa-solid fa-shield-halved" style="color: var(--accent-green);"></i>
+                        <div>
+                            <h4>Resiliência Nativa</h4>
+                            <p>O SDK opera de forma assíncrona. Indisponibilidades temporárias de serviços de terceiros não derrubam os sistemas de negócio.</p>
+                        </div>
+                    </div>
+                    <div class="problem-item" style="border-left-color: var(--accent-green);">
+                        <i class="fa-solid fa-lock" style="color: var(--accent-green);"></i>
+                        <div>
+                            <h4>Investimento Protegido</h4>
+                            <p>Elimina a dependência de SaaS proprietários e centraliza os ativos de software sob domínio da organização.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 5: ROADMAP -->
+        <div id="roadmap" class="tab-panel">
+            <div class="dashboard-card full-width">
+                <div class="card-header">
+                    <i class="fa-solid fa-route"></i>
+                    <h2>Roadmap de Implementação</h2>
+                </div>
+                
+                <div class="timeline">
+                    <div class="timeline-step">
+                        <div class="step-number">1</div>
+                        <div class="step-title">Fase 1: MVP Prático</div>
+                        <div class="step-desc">Engine funcional com criador por IA, simulador visual e SDK de testes concluídos.</div>
+                    </div>
+                    <div class="timeline-step">
+                        <div class="step-number">2</div>
+                        <div class="step-title">Fase 2: Ingestão Azure</div>
+                        <div class="step-desc">Ativação do endpoint serverless e fila de eventos resiliente na nuvem.</div>
+                    </div>
+                    <div class="timeline-step">
+                        <div class="step-number">3</div>
+                        <div class="step-title">Fase 3: Processo Piloto</div>
+                        <div class="step-desc">Homologação no fluxo de Reembolso e Adiantamento Financeiro com Power BI.</div>
+                    </div>
+                    <div class="timeline-step">
+                        <div class="step-number">4</div>
+                        <div class="step-title">Fase 4: Adoção IDP</div>
+                        <div class="step-desc">Escala como padrão oficial de orquestração para todas as áreas da empresa.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        function switchTab(tabId, element) {
+            // Hide all tab panels
+            document.querySelectorAll('.tab-panel').forEach(panel => {
+                panel.classList.remove('active');
+            });
+
+            // Remove active class from menu links
+            document.querySelectorAll('.nav-link').forEach(link => {
+                link.classList.remove('active');
+            });
+
+            // Activate selected tab and link
+            document.getElementById(tabId).classList.add('active');
+            element.classList.add('active');
+        }
+
+        function toggleDetail(detailId) {
+            const el = document.getElementById(detailId);
+            if (el.style.display === 'block') {
+                el.style.display = 'none';
+            } else {
+                document.querySelectorAll('.interactive-box').forEach(b => b.style.display = 'none');
+                el.style.display = 'block';
+            }
+        }
+    </script>
+</body>
+</html>

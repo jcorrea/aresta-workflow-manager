@@ -1,12 +1,16 @@
 <script setup>
+import { computed } from 'vue';
+import { usePage } from '@inertiajs/vue3';
+
 const year = new Date().getFullYear();
+const branding = computed(() => usePage().props.branding);
 </script>
 
 <template>
     <!-- Rodapé do starter kit (docs/brand/components/footer.html): reage ao tema claro/escuro
          (ao contrário do login), copyright em mono à esquerda, links à direita. -->
     <footer class="flex items-center justify-between border-t border-ink/10 px-6 py-4">
-        <p class="font-mono text-xs text-ink/60">{{ year }} © aresta</p>
+        <p class="font-mono text-xs text-ink/60">{{ year }} © {{ branding.app_name }}</p>
         <div class="flex gap-1">
             <!-- Como no kit, os links vêm sem rota real — trocar quando "Sobre"/"Suporte" existirem. -->
             <a href="#" class="px-1 py-2 text-sm font-semibold text-ink/60 hover:text-ink">Sobre</a>

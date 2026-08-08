@@ -41,6 +41,19 @@ class User extends Authenticatable implements FilamentUser
     }
 
     /**
+     * Papéis de negócio (`role_user`, ex.: "Aprovador Financeiro") — nomeado `domainRoles`
+     * (não `roles`) pra não colidir com `HasRoles::roles()` do Spatie (RBAC administrativo,
+     * tabela `permission_roles`). Sem essa distinção, `Filament\Actions\AttachAction` em
+     * `UsersRelationManager` adivinha a relação inversa como "roles" (plural de `Role`) e
+     * usaria o `roles()` do Spatie por engano — daí o `->inverseRelationship('domainRoles')`
+     * explícito lá.
+     */
+    public function domainRoles(): BelongsToMany
+    {
+        return $this->belongsToMany(Role::class, 'role_user');
+    }
+
+    /**
      * MVP (00-visao-geral.md §6): qualquer usuário com pelo menos uma organização acessa
      * o painel; `platform-staff` acessa mesmo sem organização (suporte/operação). Permissões
      * mais finas (workflow-admin/editor/viewer por recurso) chegam a partir da Fase 1, junto

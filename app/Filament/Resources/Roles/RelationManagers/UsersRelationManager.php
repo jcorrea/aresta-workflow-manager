@@ -28,6 +28,9 @@ class UsersRelationManager extends RelationManager
     {
         return $table
             ->recordTitleAttribute('name')
+            // Sem isso, o Filament adivinha a relação inversa em User como `roles()` — que é
+            // do Spatie (RBAC), não a `role_user` de papel de negócio (ver User::domainRoles).
+            ->inverseRelationship('domainRoles')
             ->columns([
                 TextColumn::make('name')
                     ->label('Nome')

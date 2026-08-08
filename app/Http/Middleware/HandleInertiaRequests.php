@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\AppSetting;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -26,6 +27,8 @@ class HandleInertiaRequests extends Middleware
      */
     public function share(Request $request): array
     {
+        $setting = AppSetting::current();
+
         return [
             ...parent::share($request),
             'auth' => [
@@ -35,6 +38,14 @@ class HandleInertiaRequests extends Middleware
                     'email' => $request->user()->email,
                     'avatar_url' => $request->user()->avatar_url,
                 ] : null,
+            ],
+            // Identidade configurável em /admin/app-settings (App\Models\AppSetting) — o
+            // app.blade.php raiz já resolve título/favicon/cor a partir do mesmo model antes do
+            // Vue montar, isto é só pra telas Inertia que precisam do logo/nome em runtime
+            // (AppNav.vue, Home.vue, Auth/Login.vue, AppFooter.vue).
+            'branding' => [
+                'app_name' => $setting->resolvedName(),
+                'logo_url' => $setting->logoUrl(),
             ],
         ];
     }

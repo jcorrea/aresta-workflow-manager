@@ -15,7 +15,7 @@ services:
       APP_ENV: local
       DB_CONNECTION: mysql
       DB_HOST: mysql
-      DB_PORT: 3306
+      DB_PORT: 3307
       DB_DATABASE: ${DB_DATABASE:-aresta_workflow}
       DB_USERNAME: ${DB_USERNAME:-aresta_workflow}
       DB_PASSWORD: ${DB_PASSWORD:-aresta_workflow}
@@ -53,7 +53,7 @@ services:
       MYSQL_PASSWORD: ${DB_PASSWORD:-aresta_workflow}
       MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root}
     ports:
-      - "${DB_PORT:-3306}:3306"
+      - "${DB_PORT:-3307}:3306"
     volumes:
       - aresta-workflow-mysql-data:/var/lib/mysql
     healthcheck:

@@ -66,6 +66,10 @@ cp .env.example .env   # preencha AZURE_CLIENT_ID/AZURE_CLIENT_SECRET/AZURE_TENA
 # banco MySQL de dev + a própria app, via docker-compose (rede compartilhada entre os dois)
 docker compose up -d app mysql
 docker compose exec app php artisan migrate --seed
+
+# symlink storage/app/public → public/storage — necessário pro logo/favicon enviados em
+# /admin/app-settings ficarem acessíveis via HTTP
+docker compose exec app php artisan storage:link
 ```
 
 A app sobe em `http://localhost:8000`. Scripts disponíveis em `bin/` (rodam isolados, fora da rede

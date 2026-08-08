@@ -1,15 +1,17 @@
 <script setup>
-import { Head, Link, router } from '@inertiajs/vue3';
+import { computed } from 'vue';
+import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { route } from 'ziggy-js';
 import ThemeToggle from '@/Components/ThemeToggle.vue';
 
 const props = defineProps({
     user: { type: Object, required: true },
     organizations: { type: Array, required: true },
-    appName: { type: String, required: true },
 });
 
 const initials = props.user.name?.trim().charAt(0).toUpperCase() ?? '?';
+const branding = computed(() => usePage().props.branding);
+const logoUrl = computed(() => branding.value.logo_url);
 
 function logout() {
     router.post(route('logout'));
@@ -17,14 +19,17 @@ function logout() {
 </script>
 
 <template>
-    <Head :title="appName" />
+    <Head :title="branding.app_name" />
 
     <div class="flex min-h-screen items-center justify-center bg-canvas p-4">
         <div class="w-full max-w-md rounded-xl border border-ink/10 bg-panel p-10 shadow-lg">
             <!-- Header: logo + tema -->
             <div class="mb-6 flex items-center justify-between">
-                <img class="h-8 w-auto dark:hidden" src="/img/aresta-logo-black.svg" alt="aresta" />
-                <img class="hidden h-8 w-auto dark:block" src="/img/aresta-logo.svg" alt="aresta" />
+                <img v-if="logoUrl" class="h-8 w-auto object-contain" :src="logoUrl" :alt="branding.app_name" />
+                <template v-else>
+                    <img class="h-8 w-auto dark:hidden" src="/img/aresta-logo-black.svg" alt="aresta" />
+                    <img class="hidden h-8 w-auto dark:block" src="/img/aresta-logo.svg" alt="aresta" />
+                </template>
                 <ThemeToggle />
             </div>
 

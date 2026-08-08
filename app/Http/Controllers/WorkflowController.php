@@ -145,6 +145,45 @@ class WorkflowController extends Controller
         ]);
     }
 
+    /**
+     * Tela com a descrição do processo + o modelo do diagrama (versão publicada, ou o rascunho
+     * se ainda não houver nenhuma publicada), pra a pessoa levar pra IA que usa na implementação
+     * do próprio software e essa IA identificar os pontos de integração e chamadas da API pública
+     * (04-integracao-e-notificacoes.md §5) de acordo com a stack dela.
+     */
+    public function integrationInstructions(Workflow $workflow): Response
+    {
+        Gate::authorize('view', $workflow);
+
+        $workflow->load([
+            'organization',
+            'currentPublishedVersion',
+            'versions' => fn ($query) => $query->where('status', WorkflowVersionStatus::Draft),
+        ]);
+
+        $version = $workflow->currentPublishedVersion ?? $workflow->versions->first();
+
+        abort_unless($version, 404, 'Este workflow ainda não tem nenhuma versão (publicada ou rascunho) pra gerar instruções.');
+
+        return Inertia::render('Workflows/IntegrationInstructions', [
+            'workflow' => [
+                'id' => $workflow->id,
+                'name' => $workflow->name,
+                'slug' => $workflow->slug,
+                'description' => $workflow->description,
+                'organizationId' => $workflow->organization_id,
+                'organizationName' => $workflow->organization?->name,
+            ],
+            'version' => [
+                'id' => $version->id,
+                'status' => $version->status->value,
+                'versionNumber' => $version->version_number,
+            ],
+            'graph' => $version->toGraphPayload(),
+            'apiBaseUrl' => rtrim(config('app.url'), '/').'/api',
+        ]);
+    }
+
     public function rollback(Request $request, Workflow $workflow): RedirectResponse
     {
         Gate::authorize('publish', $workflow);
