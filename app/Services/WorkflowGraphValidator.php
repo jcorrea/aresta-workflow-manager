@@ -32,6 +32,14 @@ class WorkflowGraphValidator
     private const EXIT = -1;
 
     /**
+     * Populado como efeito colateral de `validateForkJoinPairing()` a cada chamada de
+     * `validate()` — ver `validAndJoinIds()`.
+     *
+     * @var array<int, int>
+     */
+    private array $lastValidAndJoinIds = [];
+
+    /**
      * @return Collection<int, GraphIssue>
      */
     public function validate(WorkflowVersion $version): Collection
@@ -62,6 +70,24 @@ class WorkflowGraphValidator
         return $this->validate($version)->doesntContain(
             fn (GraphIssue $issue) => $issue->severity === GraphIssueSeverity::Error,
         );
+    }
+
+    /**
+     * Ids de `WorkflowActivity` confirmados, pela mesma análise de pós-dominância de
+     * `validateForkJoinPairing()`, como o join real de algum fork bem formado — o único caso
+     * em que `WorkflowEngine::isJoin()` deve esperar múltiplas chegadas (persistido em
+     * `workflow_activities.is_and_join` na publicação, ver `WorkflowVersionController::publish()`).
+     * Qualquer outro nó com ≥2 transições de entrada (ex.: um loop de retrabalho que reconverge
+     * num nó já alcançado por um caminho direto, sem fork correspondente) não entra aqui e o
+     * motor trata como merge simples — ativa na primeira chegada.
+     *
+     * @return Collection<int, int>
+     */
+    public function validAndJoinIds(WorkflowVersion $version): Collection
+    {
+        $this->validate($version);
+
+        return collect($this->lastValidAndJoinIds)->unique()->values();
     }
 
     /**
@@ -219,6 +245,7 @@ class WorkflowGraphValidator
     private function validateForkJoinPairing(Collection $activities, Collection $successors, Collection $predecessors): Collection
     {
         $issues = collect();
+        $this->lastValidAndJoinIds = [];
 
         $startIds = $activities->filter(fn (WorkflowActivity $a) => $a->is_start)->keys()->all();
         $sinkIds = $activities->filter(fn (WorkflowActivity $a) => $successors->get($a->id, collect())->isEmpty())->keys()->all();
@@ -290,6 +317,8 @@ class WorkflowGraphValidator
                 continue;
             }
 
+            $leaksOutsideBlock = false;
+
             foreach ($joinIncoming as $incoming) {
                 $predecessorId = $incoming->from_activity_id;
 
@@ -304,8 +333,13 @@ class WorkflowGraphValidator
                         [$fork->id, $joinId, $predecessorId],
                     ));
 
+                    $leaksOutsideBlock = true;
                     break;
                 }
+            }
+
+            if (! $leaksOutsideBlock) {
+                $this->lastValidAndJoinIds[] = $joinId;
             }
         }
 

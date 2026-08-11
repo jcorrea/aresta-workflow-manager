@@ -27,8 +27,17 @@ por um serviço explícito (`WorkflowEngine`) que avalia o grafo (`workflow_acti
      `04-integracao-e-notificacoes.md` §3.
 3. **Concluir uma atividade** (`completeActivity(ProcessInstanceActivity, array $result)`):
    - Marca `status = completed`, grava `result`/`form_data`, `completed_at`.
+   - Mescla `$result` em `ProcessInstance.context` (`array_merge`, chave de campo escolhida por
+     quem desenhou o processo — colisão de nome entre atividades é responsabilidade de nomear
+     campos com chaves únicas, igual variável em qualquer linguagem). Sem isso, um nó `condition`
+     dedicado (ex.: um nó de "Decisão" separado logo depois de um `form`/`task`) não teria como
+     enxergar a resposta de quem o antecede: `condition` se autocompleta com `result = []` (§2,
+     item 2) e só tem acesso a `context` — nunca ao `result` de quem o ativou. Decisão registrada
+     (2026-08-08): `context` acumula ao longo da execução, não é só o payload inicial — ver
+     `01-modelo-de-dados.md` §3.1.
    - Se `workflow_activity.is_end`: marca `ProcessInstance.status = completed`, `completed_at`, para
-     de propagar.
+     de propagar (o merge acima acontece antes dessa checagem, então `context` fica completo mesmo
+     na última atividade).
    - Senão, chama `advance()` — ver §3.
 
 ## 3. `advance()` — avaliação de transições (o coração do motor)
@@ -44,9 +53,16 @@ paralelo "gerar contrato" e "notificar financeiro".
 
 ### 3.2 Decisão (XOR) — transições `condition_type = expression`
 
-Avaliadas em ordem de `sort_order`; a **primeira** cuja `condition_expression` seja verdadeira
-(avaliada contra `ProcessInstance.context` + `ProcessInstanceActivity.result`) é seguida, e as
-demais são ignoradas — semântica de gateway exclusivo (XOR), igual a um `if/elseif/else`. Se
+Avaliadas em ordem de `sort_order`; a **primeira** cuja `condition_expression` seja verdadeira é
+seguida, e as demais são ignoradas — semântica de gateway exclusivo (XOR), igual a um
+`if/elseif/else`. `field` resolve contra duas fontes, na avaliação de uma transição saindo de `X`:
+`result.*` é o `result` da própria ativação de `X` que está sendo concluída agora (só existe pra
+transições que saem direto de `X`, não sobrevive além do próximo nó); `context.*` é
+`ProcessInstance.context` acumulado — inclui o payload inicial da instância **e** o `result` de
+toda atividade já concluída no caminho até aqui (§2, item 3). Na prática: uma condição que só olha
+o resultado da atividade imediatamente anterior pode usar `result.*` **ou** `context.*` (equivalem
+nesse caso); uma condição num nó `condition` dedicado, alcançado por uma transição `always` (não
+tem `result` próprio relevante — o dele é sempre `[]`), só enxerga `context.*`. Se
 nenhuma bater e não houver uma transição "padrão" (proposta: uma transição `always` pode coexistir
 como fallback, desde que seja a última em `sort_order`), a instância fica presa nesse nó — o motor
 deve logar/notificar isso como um erro de configuração do processo (fluxo mal desenhado), não falhar
@@ -164,7 +180,15 @@ Avaliador implementado como um serviço simples (`ConditionEvaluator`) que perco
 recursivamente — **não** usar `symfony/expression-language` ou equivalente com sintaxe textual, para
 não expor uma linguagem de expressão a um usuário não-técnico nem abrir superfície de
 injeção/avaliação arbitrária. `field` sempre referencia um caminho dentro de `context` (variáveis do
-processo) ou `result` (saída da atividade anterior), nunca código arbitrário.
+processo, acumuladas ao longo da execução — §3.2) ou `result` (saída da atividade que está sendo
+concluída agora), nunca código arbitrário.
+
+Comparação usa `==`/`!=`/`>`/`>=`/`<`/`<=` soltos do PHP (sem cast explícito) — armadilha conhecida:
+como o builder visual só tem campo de texto pra "Valor" (`03-editor-visual.md`), evitar usar a
+string literal `"false"` como valor de comparação contra um resultado booleano, porque em PHP
+`false == "false"` é `false` (string não vazia é *truthy* na conversão) — preferir valores de texto
+sem ambiguidade booleana (ex.: `"aprovado"`/`"recusado"`) em vez de `"true"`/`"false"` pros campos
+que alimentam decisão.
 
 ## 5. SLA / prazos
 

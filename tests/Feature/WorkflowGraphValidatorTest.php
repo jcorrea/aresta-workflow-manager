@@ -293,4 +293,59 @@ class WorkflowGraphValidatorTest extends TestCase
         $this->assertTrue($this->validator->isPublishable($this->version));
         $this->assertCount(0, $this->validator->validate($this->version));
     }
+
+    public function test_well_formed_fork_join_pair_is_identified_as_valid_and_join(): void
+    {
+        $a = $this->activity(['is_start' => true]);
+        $b = $this->activity();
+        $c = $this->activity();
+        $d = $this->activity(['is_end' => true]);
+        $this->transition($a, $b, ['sort_order' => 0]);
+        $this->transition($a, $c, ['sort_order' => 1]);
+        $this->transition($b, $d);
+        $this->transition($c, $d);
+
+        $this->assertSame([$d->id], $this->validator->validAndJoinIds($this->version)->all());
+    }
+
+    /**
+     * O bug relatado em produção (instância 2026-000015): um loop de retrabalho ("reprovado,
+     * refazer") reconvergindo num nó já alcançado por um caminho direto, sem fork correspondente.
+     * `WorkflowEngine::isJoin()` tratava isso como AND-join (≥2 transições de entrada) e travava
+     * a instância esperando uma segunda chegada que só pode acontecer depois da primeira já ter
+     * passado por ali. Esse padrão é legítimo (02-motor-de-execucao.md §3.4) e não deve ser
+     * sinalizado como erro nem marcado como `is_and_join`.
+     */
+    public function test_rework_loop_merging_into_an_already_reached_node_is_not_an_and_join(): void
+    {
+        $a = $this->activity(['is_start' => true]);
+        $b = $this->activity();
+        $decision = $this->activity(['type' => WorkflowActivityType::Condition, 'assignee_type' => null, 'assignee_user_id' => null]);
+        $end = $this->activity(['is_end' => true]);
+
+        $this->transition($a, $b, ['sort_order' => 0]);
+        $this->transition($b, $decision);
+        $this->transition($decision, $b, [
+            'condition_type' => ConditionType::Expression,
+            'condition_expression' => ['field' => 'result.status', 'operator' => '=', 'value' => 'reprovado'],
+            'sort_order' => 0,
+        ]);
+        $this->transition($decision, $end, [
+            'condition_type' => ConditionType::Expression,
+            'condition_expression' => ['field' => 'result.status', 'operator' => '=', 'value' => 'aprovado'],
+            'sort_order' => 1,
+        ]);
+
+        $issues = $this->validator->validate($this->version);
+
+        $this->assertFalse(
+            $issues->contains(fn ($i) => str_starts_with($i->code, 'fork_')),
+            'loop de retrabalho não deve ser sinalizado como fork/join mal formado',
+        );
+        $this->assertTrue($this->validator->isPublishable($this->version));
+        $this->assertTrue(
+            $this->validator->validAndJoinIds($this->version)->isEmpty(),
+            'nó do loop não é join de nenhum fork — não deve esperar múltiplas chegadas',
+        );
+    }
 }

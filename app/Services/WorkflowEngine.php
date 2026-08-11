@@ -4,7 +4,6 @@ namespace App\Services;
 
 use App\Enums\AssigneeType;
 use App\Enums\ConditionType;
-use App\Enums\OrganizationRole;
 use App\Enums\ProcessInstanceActivityStatus;
 use App\Enums\ProcessInstanceStatus;
 use App\Enums\WorkflowActivityType;
@@ -20,11 +19,10 @@ use App\Models\WorkflowTransition;
 use App\Notifications\ActivityAssignedNotification;
 use App\Notifications\AutomatedActionFailedNotification;
 use App\Notifications\ProcessInstanceCompletedNotification;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
-use Spatie\Permission\Models\Role as PermissionRole;
-use Spatie\Permission\PermissionRegistrar;
 use Throwable;
 
 /**
@@ -55,7 +53,12 @@ class WorkflowEngine
 
         $version = $workflow->currentPublishedVersion;
 
-        $instance = ProcessInstance::create([
+        // `code` precisa ser único globalmente (correlação com outros sistemas GIITS) e é
+        // derivado do maior sequencial já emitido no ano corrente — não de `count()`, que
+        // colide após qualquer exclusão em cascata de uma organização (`cascadeOnDelete` em
+        // `process_instances.organization_id`). O lock evita duas instâncias concorrentes
+        // lerem o mesmo "próximo" sequencial antes de qualquer insert commitar.
+        $instance = Cache::lock('process-instance-code-generation', 10)->block(5, fn () => ProcessInstance::create([
             'workflow_version_id' => $version->id,
             'organization_id' => $workflow->organization_id,
             'code' => $this->generateCode(),
@@ -65,7 +68,7 @@ class WorkflowEngine
             'started_by_external_system_id' => $startedBy instanceof ExternalSystem ? $startedBy->id : null,
             'started_at' => now(),
             'context' => $context,
-        ]);
+        ]));
 
         $startActivities = WorkflowActivity::query()
             ->whereHas('workflowStep', fn ($query) => $query->where('workflow_version_id', $version->id))
@@ -137,14 +140,29 @@ class WorkflowEngine
      */
     public function completeActivity(ProcessInstanceActivity $activity, array $result = []): void
     {
-        $activity->update([
+        // fill()+save() em vez de update(): preserva atributos de atribuição externa
+        // (04-integracao-e-notificacoes.md §5) que o chamador já tenha setado no model em
+        // memória antes de chamar este método — o motor não precisa conhecer esses detalhes.
+        $activity->fill([
             'status' => ProcessInstanceActivityStatus::Completed,
             'result' => $result,
             'completed_at' => now(),
         ]);
+        $activity->save();
 
         $workflowActivity = $activity->workflowActivity;
         $instance = $activity->processInstance;
+
+        // `result` passa a fazer parte de `context` a partir daqui — não só a atividade
+        // seguinte enxerga a resposta (via `$activity->result`), qualquer nó mais à frente no
+        // processo também (ex.: um nó `condition` dedicado logo depois de um `form`, que se
+        // autocompleta com `result = []` e só tem acesso a `context`, nunca ao `result` de quem
+        // o ativou — 01-modelo-de-dados.md §3.1, §7). `array_merge` simples: quem desenha o
+        // processo escolhe as chaves dos campos, colisão entre atividades é responsabilidade de
+        // nomear campos com chaves únicas, igual a variável em qualquer linguagem.
+        if ($result !== []) {
+            $instance->update(['context' => array_merge($instance->context ?? [], $result)]);
+        }
 
         if ($workflowActivity->is_end) {
             $instance->update([
@@ -239,9 +257,17 @@ class WorkflowEngine
         $this->activateActivity($instance, $toActivity);
     }
 
+    /**
+     * `is_and_join` é calculado e persistido só na publicação
+     * (`WorkflowGraphValidator::validAndJoinIds()`, `WorkflowVersionController::publish()`) —
+     * o motor não conta transições de entrada em runtime. Um nó com ≥2 entradas que não seja o
+     * join confirmado de um fork bem formado (ex.: um loop de retrabalho reconvergindo num nó já
+     * alcançado por um caminho direto) não é AND-join: ativa na primeira chegada, como qualquer
+     * merge simples (§3.3.1/§3.4).
+     */
     private function isJoin(WorkflowActivity $activity): bool
     {
-        return WorkflowTransition::query()->where('to_activity_id', $activity->id)->count() > 1;
+        return $activity->is_and_join;
     }
 
     /**
@@ -325,19 +351,7 @@ class WorkflowEngine
 
     private function notifyWorkflowAdmins(ProcessInstanceActivity $piActivity, string $errorSummary): void
     {
-        $organizationId = $piActivity->processInstance->organization_id;
-
-        $registrar = app(PermissionRegistrar::class);
-        $previousTeamId = $registrar->getPermissionsTeamId();
-        $registrar->setPermissionsTeamId($organizationId);
-
-        $admins = PermissionRole::query()
-            ->where('name', OrganizationRole::Admin->value)
-            ->where('organization_id', $organizationId)
-            ->first()
-            ?->users ?? collect();
-
-        $registrar->setPermissionsTeamId($previousTeamId);
+        $admins = OrganizationAdmins::for($piActivity->processInstance->organization_id);
 
         Notification::send($admins, new AutomatedActionFailedNotification($piActivity, $errorSummary));
     }
@@ -386,6 +400,15 @@ class WorkflowEngine
 
     private function generateCode(): string
     {
-        return sprintf('%d-%06d', now()->year, ProcessInstance::withoutGlobalScopes()->count() + 1);
+        $prefix = now()->year.'-';
+
+        $lastCode = ProcessInstance::withoutGlobalScopes()
+            ->where('code', 'like', $prefix.'%')
+            ->orderByDesc('code')
+            ->value('code');
+
+        $nextSequence = $lastCode ? ((int) substr($lastCode, strlen($prefix))) + 1 : 1;
+
+        return sprintf('%s%06d', $prefix, $nextSequence);
     }
 }

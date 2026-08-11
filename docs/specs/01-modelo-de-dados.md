@@ -235,7 +235,7 @@ significando a mesma coisa ao longo do tempo:
 | status | enum: `running`, `completed`, `cancelled` | |
 | started_by | FK → users | |
 | started_at, completed_at | timestamp | |
-| context | json | "variáveis do processo" — dados de negócio usados por condições e por integrações externas (ver `02-motor-de-execucao.md` §4) |
+| context | json | "variáveis do processo" — payload inicial da instância **mais** o `result` de cada atividade concluída ao longo do caminho, mesclado automaticamente por `WorkflowEngine::completeActivity()` (decisão 2026-08-08, `02-motor-de-execucao.md` §2 item 3); usado por condições (inclusive de nós `condition` dedicados mais à frente no grafo, que não têm acesso ao `result` de quem os antecede) e por integrações externas (ver `02-motor-de-execucao.md` §4) |
 | timestamps | | |
 
 ### 3.2 `process_instance_steps`
@@ -405,8 +405,16 @@ sistema GIITS interno ou não", não entre sistemas GIITS entre si). Ver item em
   `03-editor-visual.md` §5 antes de implementar a fase 2 do motor, já que o motor precisa saber
   avaliar esse JSON.
 - Se `context` de `process_instances` crescer muito (processos com muitos campos de formulário ao
-  longo do caminho), avaliar mover para uma tabela `process_instance_variables` chave/valor em vez
-  de um único JSON — não fazer isso preventivamente, só se o JSON se mostrar limitante na prática.
+  longo do caminho — agora ainda mais provável, já que `context` acumula o `result` de toda
+  atividade concluída, não só o payload inicial, ver acima e `02-motor-de-execucao.md` §2 item 3),
+  avaliar mover para uma tabela `process_instance_variables` chave/valor em vez de um único JSON —
+  não fazer isso preventivamente, só se o JSON se mostrar limitante na prática.
+- Colisão de nome de campo entre atividades diferentes que escrevem em `context` (`array_merge`
+  raso, último a completar vence): hoje é responsabilidade de quem desenha o processo escolher
+  chaves únicas pros campos de formulário, igual variável em qualquer linguagem — não há
+  namespacing automático por atividade. Se isso se mostrar um problema recorrente na prática,
+  considerar avisar no editor visual quando duas atividades do mesmo processo usam a mesma chave de
+  campo (não bloquear, só alertar).
 - **Sem template global/compartilhado entre clientes**: como `workflows.organization_id` agora é
   obrigatório (§2.1), não existe mais um "processo padrão da ITS Group" visível a todas as
   organizações — se dois clientes têm o mesmo processo de negócio, hoje a única forma de reaproveitar

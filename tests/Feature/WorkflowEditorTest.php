@@ -231,6 +231,47 @@ class WorkflowEditorTest extends TestCase
         $this->assertSame(ActivationAction::Publish, $activation->action);
     }
 
+    /**
+     * `WorkflowEngine::isJoin()` passa a confiar em `is_and_join` em vez de contar transições de
+     * entrada em runtime (02-motor-de-execucao.md §3.3.1) — só a publicação, que já roda o
+     * `WorkflowGraphValidator`, tem a análise de pós-dominância necessária pra saber quais nós
+     * são join de verdade.
+     */
+    public function test_publish_marks_the_real_join_of_a_well_formed_fork_join_block_as_and_join(): void
+    {
+        $org = Organization::factory()->create();
+        $admin = $this->makeUserWithRole($org, OrganizationRole::Admin->value);
+        $workflow = Workflow::factory()->for($org)->for($admin, 'createdBy')->create();
+        $version = WorkflowVersion::factory()->for($workflow)->for($admin, 'createdBy')->create();
+        $step = WorkflowStep::factory()->for($version, 'workflowVersion')->create();
+
+        $activity = fn (array $attributes = []) => WorkflowActivity::factory()->for($step, 'workflowStep')->create(array_merge([
+            'assignee_type' => AssigneeType::User,
+            'assignee_user_id' => $admin->id,
+        ], $attributes));
+        $transition = fn ($from, $to, array $attributes = []) => WorkflowTransition::factory()->for($version, 'workflowVersion')->create(array_merge([
+            'from_activity_id' => $from->id,
+            'to_activity_id' => $to->id,
+        ], $attributes));
+
+        $a = $activity(['is_start' => true]);
+        $b = $activity();
+        $c = $activity();
+        $join = $activity(['is_end' => true]);
+        $transition($a, $b, ['sort_order' => 0]);
+        $transition($a, $c, ['sort_order' => 1]);
+        $transition($b, $join);
+        $transition($c, $join);
+
+        $this->actingAs($admin)
+            ->post(route('workflows.versions.publish', [$workflow, $version]))
+            ->assertRedirect(route('workflows.show', $workflow));
+
+        $this->assertTrue($join->fresh()->is_and_join);
+        $this->assertFalse($a->fresh()->is_and_join);
+        $this->assertFalse($b->fresh()->is_and_join);
+    }
+
     public function test_edit_again_clones_the_published_version_into_a_new_draft(): void
     {
         $org = Organization::factory()->create();
@@ -315,6 +356,29 @@ class WorkflowEditorTest extends TestCase
                 ->has('graph.nodes')
                 ->has('graph.edges')
                 ->where('issues.0.code', 'missing_start')
+                ->where('workflow.currentPublishedVersionNumber', null)
+            );
+    }
+
+    /**
+     * O botão "Iniciar instância (teste)" do editor visual só faz sentido quando já existe uma
+     * versão publicada pra rodar (a instância nunca é criada a partir do rascunho em edição) —
+     * ver comentário em ProcessInstanceController::store.
+     */
+    public function test_edit_page_exposes_the_published_version_number_when_one_exists(): void
+    {
+        $org = Organization::factory()->create();
+        $admin = $this->makeUserWithRole($org, OrganizationRole::Admin->value);
+        $workflow = Workflow::factory()->for($org)->for($admin, 'createdBy')->create();
+        $published = WorkflowVersion::factory()->for($workflow)->for($admin, 'createdBy')->published()->create(['version_number' => 3]);
+        $workflow->update(['current_published_version_id' => $published->id]);
+        $draft = WorkflowVersion::factory()->for($workflow)->for($admin, 'createdBy')->create();
+
+        $this->actingAs($admin)
+            ->get(route('workflows.versions.edit', [$workflow, $draft]))
+            ->assertInertia(fn ($page) => $page
+                ->component('Workflows/Versions/Edit')
+                ->where('workflow.currentPublishedVersionNumber', 3)
             );
     }
 }

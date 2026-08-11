@@ -5,11 +5,12 @@ namespace App\Http\Controllers;
 use App\Enums\ActivationAction;
 use App\Enums\GraphIssueSeverity;
 use App\Enums\WorkflowVersionStatus;
+use App\Exceptions\WorkflowDraftRefusedException;
 use App\Models\Role;
 use App\Models\Workflow;
+use App\Models\WorkflowActivity;
 use App\Models\WorkflowVersion;
 use App\Models\WorkflowVersionActivation;
-use App\Exceptions\WorkflowDraftRefusedException;
 use App\Services\AiWorkflowDraftRefiner;
 use App\Services\WorkflowGraphValidator;
 use App\Services\WorkflowVersionCloner;
@@ -37,11 +38,14 @@ class WorkflowVersionController extends Controller
 
         $issues = $this->validator->validate($version);
 
+        $workflow->load('currentPublishedVersion');
+
         return Inertia::render('Workflows/Versions/Edit', [
             'workflow' => [
                 'id' => $workflow->id,
                 'name' => $workflow->name,
                 'description' => $workflow->description,
+                'currentPublishedVersionNumber' => $workflow->currentPublishedVersion?->version_number,
             ],
             'version' => [
                 'id' => $version->id,
@@ -151,6 +155,14 @@ class WorkflowVersionController extends Controller
                 'published_at' => now(),
                 'draft_lock_workflow_id' => null,
             ]);
+
+            // `WorkflowEngine::isJoin()` confia nesse valor em vez de contar transições de
+            // entrada em runtime (02-motor-de-execucao.md §3.3.1) — calculado uma única vez
+            // aqui porque a versão é imutável depois de publicada.
+            $joinIds = $this->validator->validAndJoinIds($version);
+            if ($joinIds->isNotEmpty()) {
+                WorkflowActivity::query()->whereIn('id', $joinIds)->update(['is_and_join' => true]);
+            }
 
             $workflow->update(['current_published_version_id' => $version->id]);
 

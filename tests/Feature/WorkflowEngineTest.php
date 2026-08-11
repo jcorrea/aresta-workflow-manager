@@ -79,6 +79,17 @@ class WorkflowEngineTest extends TestCase
         ], $attributes));
     }
 
+    /**
+     * `is_and_join` não é `$fillable` (calculado só na publicação, ver
+     * `WorkflowActivity::class`) — os testes deste arquivo montam o grafo direto via factory,
+     * sem passar pelo `WorkflowGraphValidator`, então precisam marcar explicitamente qual nó é
+     * um join de verdade, do jeito que `WorkflowVersionController::publish()` faria.
+     */
+    private function markAsAndJoin(WorkflowActivity $activity): void
+    {
+        WorkflowActivity::query()->whereKey($activity->id)->update(['is_and_join' => true]);
+    }
+
     private function latestActivityFor(ProcessInstance $instance, WorkflowActivity $workflowActivity)
     {
         return $instance->activities()
@@ -178,6 +189,42 @@ class WorkflowEngineTest extends TestCase
         $this->assertNull($this->latestActivityFor($instanceLow, $highValue));
     }
 
+    /**
+     * Um nó `condition` se autocompleta com `result = []` (ver `activateActivity()`) — só
+     * enxerga `context`. Sem mesclar o `result` de quem o antecede de volta em `context`, um
+     * nó de decisão logo depois de um `form`/`task` nunca teria como saber o que a pessoa
+     * respondeu. Cobre exatamente esse desenho: form → decisão dedicada → aprovado/reprovado.
+     */
+    public function test_completing_an_activity_merges_its_result_into_context_for_a_downstream_decision(): void
+    {
+        $form = $this->activity(['is_start' => true]);
+        $decision = $this->activity(['type' => WorkflowActivityType::Condition]);
+        $approved = $this->activity(['is_end' => true, 'type' => WorkflowActivityType::Condition]);
+        $rejected = $this->activity(['is_end' => true, 'type' => WorkflowActivityType::Condition]);
+
+        $this->transition($form, $decision);
+        $this->transition($decision, $approved, [
+            'condition_type' => ConditionType::Expression,
+            'condition_expression' => ['field' => 'context.decisao', 'operator' => '=', 'value' => 'aprovado'],
+            'sort_order' => 0,
+        ]);
+        $this->transition($decision, $rejected, [
+            'condition_type' => ConditionType::Expression,
+            'condition_expression' => ['field' => 'context.decisao', 'operator' => '=', 'value' => 'recusado'],
+            'sort_order' => 1,
+        ]);
+
+        $instance = $this->engine->start($this->workflow, [], $this->user);
+        $formActivity = $this->latestActivityFor($instance, $form);
+
+        $this->engine->completeActivity($formActivity, ['decisao' => 'recusado']);
+
+        $this->assertSame(['decisao' => 'recusado'], $instance->fresh()->context);
+        $this->assertSame(ProcessInstanceStatus::Completed, $instance->fresh()->status);
+        $this->assertNotNull($this->latestActivityFor($instance, $rejected));
+        $this->assertNull($this->latestActivityFor($instance, $approved));
+    }
+
     public function test_decision_with_no_matching_branch_and_no_fallback_leaves_the_instance_stuck(): void
     {
         $a = $this->activity(['is_start' => true, 'type' => WorkflowActivityType::Condition]);
@@ -204,6 +251,7 @@ class WorkflowEngineTest extends TestCase
         $this->transition($a, $c, ['sort_order' => 1]);
         $this->transition($b, $d, ['sort_order' => 0]);
         $this->transition($c, $d, ['sort_order' => 0]);
+        $this->markAsAndJoin($d);
 
         // Ordem 1: B antes de C.
         $instance1 = $this->engine->start($this->workflow, [], $this->user);
@@ -297,6 +345,7 @@ class WorkflowEngineTest extends TestCase
             'condition_expression' => ['field' => 'result.retry', 'operator' => '=', 'value' => false],
             'sort_order' => 1,
         ]);
+        $this->markAsAndJoin($j);
 
         $instance = $this->engine->start($this->workflow, [], $this->user);
 
@@ -339,6 +388,56 @@ class WorkflowEngineTest extends TestCase
         $this->assertNotSame($j1->id, $j2->id, 'join deve ativar de novo só quando as duas chegadas da segunda passagem completarem');
 
         $this->engine->completeActivity($j2, ['retry' => false]);
+        $this->assertSame(ProcessInstanceStatus::Completed, $instance->fresh()->status);
+    }
+
+    /**
+     * Bug relatado em produção (instância 2026-000015, "Processo de reajuste"): um nó de
+     * formulário recebia tanto a entrada direta quanto o retorno de um loop de reprovação — sem
+     * nenhum fork correspondente. Antes do fix, `isJoin()` contava 2 transições de entrada e
+     * classificava o nó como AND-join, travando a instância na primeira chegada à espera de uma
+     * segunda chegada que só existe depois da primeira já ter passado por ali.
+     */
+    public function test_rework_loop_merging_into_an_already_reached_node_activates_immediately_and_can_repeat(): void
+    {
+        $a = $this->activity(['is_start' => true]);
+        $sendEmail = $this->activity(['type' => WorkflowActivityType::AutomatedAction]);
+        $propose = $this->activity(); // alvo do merge (loop de reprovação) — não é AND-join.
+        $evaluate = $this->activity();
+        $decision = $this->activity(['type' => WorkflowActivityType::Condition]);
+        $end = $this->activity(['is_end' => true, 'type' => WorkflowActivityType::Condition]);
+
+        $this->transition($a, $sendEmail);
+        $this->transition($sendEmail, $propose);
+        $this->transition($propose, $evaluate);
+        $this->transition($evaluate, $decision);
+        $this->transition($decision, $propose, [
+            'condition_type' => ConditionType::Expression,
+            'condition_expression' => ['field' => 'context.status', 'operator' => '=', 'value' => 'reprovado'],
+            'sort_order' => 0,
+        ]);
+        $this->transition($decision, $end, [
+            'condition_type' => ConditionType::Expression,
+            'condition_expression' => ['field' => 'context.status', 'operator' => '=', 'value' => 'aprovado'],
+            'sort_order' => 1,
+        ]);
+        // $propose intencionalmente não é marcado is_and_join — replica o grafo do bug relatado.
+
+        $instance = $this->engine->start($this->workflow, [], $this->user);
+        $this->engine->completeActivity($this->latestActivityFor($instance, $a));
+
+        $propose1 = $this->latestActivityFor($instance, $propose);
+        $this->assertNotNull($propose1, 'primeira chegada no nó de merge deve ativar direto, sem esperar o loop');
+
+        $this->engine->completeActivity($propose1);
+        $this->engine->completeActivity($this->latestActivityFor($instance, $evaluate), ['status' => 'reprovado']);
+
+        $propose2 = $this->latestActivityFor($instance, $propose);
+        $this->assertNotSame($propose1->id, $propose2->id, 'reprovação deve reativar o mesmo nó, gerando uma nova passagem');
+
+        $this->engine->completeActivity($propose2);
+        $this->engine->completeActivity($this->latestActivityFor($instance, $evaluate), ['status' => 'aprovado']);
+
         $this->assertSame(ProcessInstanceStatus::Completed, $instance->fresh()->status);
     }
 
