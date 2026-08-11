@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\ApiTokenController;
 use App\Http\Controllers\Auth\AzureController;
 use App\Http\Controllers\InboxController;
 use App\Http\Controllers\ProcessInstanceActivityController;
@@ -70,6 +71,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/workflows', [WorkflowController::class, 'store'])->name('workflows.store');
     Route::get('/workflows/{workflow}', [WorkflowController::class, 'show'])->name('workflows.show');
     Route::get('/workflows/{workflow}/integration-instructions', [WorkflowController::class, 'integrationInstructions'])->name('workflows.integration-instructions');
+    Route::post('/workflows/{workflow}/api-token', [ApiTokenController::class, 'store'])->name('workflows.api-token.store');
     Route::delete('/workflows/{workflow}', [WorkflowController::class, 'destroy'])->name('workflows.destroy');
     Route::post('/workflows/{workflow}/rollback', [WorkflowController::class, 'rollback'])->name('workflows.rollback');
     Route::post('/workflows/{workflow}/instances', [ProcessInstanceController::class, 'store'])->name('process-instances.store');

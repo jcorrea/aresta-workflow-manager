@@ -118,10 +118,11 @@ class WorkflowController extends Controller
             ->count();
 
         $versions = WorkflowVersion::query()
+            ->with('createdBy')
             ->where('workflow_id', $workflow->id)
             ->where('status', WorkflowVersionStatus::Published)
             ->orderByDesc('version_number')
-            ->get(['id', 'version_number', 'published_at']);
+            ->get(['id', 'version_number', 'published_at', 'created_by']);
 
         return Inertia::render('Workflows/Show', [
             'workflow' => [
@@ -141,6 +142,7 @@ class WorkflowController extends Controller
                 'id' => $v->id,
                 'version_number' => $v->version_number,
                 'published_at' => $v->published_at?->format('d/m/Y H:i') ?? $v->published_at,
+                'published_by_name' => $v->createdBy?->name,
             ]),
         ]);
     }
@@ -151,7 +153,7 @@ class WorkflowController extends Controller
      * do próprio software e essa IA identificar os pontos de integração e chamadas da API pública
      * (04-integracao-e-notificacoes.md §5) de acordo com a stack dela.
      */
-    public function integrationInstructions(Workflow $workflow): Response
+    public function integrationInstructions(Request $request, Workflow $workflow): Response
     {
         Gate::authorize('view', $workflow);
 
@@ -164,6 +166,11 @@ class WorkflowController extends Controller
         $version = $workflow->currentPublishedVersion ?? $workflow->versions->first();
 
         abort_unless($version, 404, 'Este workflow ainda não tem nenhuma versão (publicada ou rascunho) pra gerar instruções.');
+
+        $activeToken = $request->user()->tokens()
+            ->get()
+            ->first(fn ($token) => in_array("org:{$workflow->organization_id}", $token->abilities ?? [], true)
+                && (! $token->expires_at || $token->expires_at->isFuture()));
 
         return Inertia::render('Workflows/IntegrationInstructions', [
             'workflow' => [
@@ -181,6 +188,10 @@ class WorkflowController extends Controller
             ],
             'graph' => $version->toGraphPayload(),
             'apiBaseUrl' => rtrim(config('app.url'), '/').'/api',
+            'apiToken' => [
+                'hasActiveToken' => $activeToken !== null,
+                'expiresAt' => $activeToken?->expires_at?->format('d/m/Y'),
+            ],
         ]);
     }
 

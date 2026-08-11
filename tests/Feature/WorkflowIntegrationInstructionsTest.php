@@ -64,9 +64,30 @@ class WorkflowIntegrationInstructionsTest extends TestCase
                 ->has('graph.nodes')
                 ->has('graph.edges')
                 ->where('apiBaseUrl', rtrim(config('app.url'), '/').'/api')
+                ->where('apiToken.hasActiveToken', false)
+                ->where('apiToken.expiresAt', null)
             );
 
         $this->assertNotSame($draft->id, $published->id);
+    }
+
+    public function test_shows_the_active_token_state_after_generating_one(): void
+    {
+        $org = Organization::factory()->create();
+        $viewer = $this->makeUserWithRole($org, OrganizationRole::Viewer->value);
+
+        $workflow = Workflow::factory()->for($org)->for($viewer, 'createdBy')->create();
+        $published = WorkflowVersion::factory()->for($workflow)->for($viewer, 'createdBy')->published()->create(['version_number' => 1]);
+        $workflow->update(['current_published_version_id' => $published->id]);
+
+        $this->actingAs($viewer)->postJson(route('workflows.api-token.store', $workflow))->assertOk();
+
+        $this->actingAs($viewer)
+            ->get(route('workflows.integration-instructions', $workflow))
+            ->assertInertia(fn ($page) => $page
+                ->where('apiToken.hasActiveToken', true)
+                ->where('apiToken.expiresAt', now()->addDays(90)->format('d/m/Y'))
+            );
     }
 
     public function test_falls_back_to_the_draft_graph_when_no_published_version_exists(): void
