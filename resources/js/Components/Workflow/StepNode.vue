@@ -37,15 +37,19 @@ function onResizeEnd({ params }) {
         class="h-full w-full rounded-xl border-2 border-dashed bg-panel/60"
         :class="selected ? 'border-accent' : 'border-ink/20'"
     >
-        <div class="flex items-center justify-between rounded-t-lg bg-ink/5 px-2 py-1 text-xs font-semibold text-ink/70">
-            <span>{{ data.name }}</span>
+        <div class="flex items-center justify-between rounded-t-lg border-b border-ink/10 bg-ink/5 px-3 py-1.5 text-xs font-semibold text-ink/80">
+            <span class="truncate font-medium">{{ data.name }}</span>
             <button
                 v-if="!readonly"
                 type="button"
-                class="text-accent hover:underline"
+                class="inline-flex items-center gap-1 rounded-md bg-accent px-2 py-0.5 text-xs font-medium text-white shadow-sm transition hover:bg-accent/90 active:scale-95"
+                title="Adicionar atividade nesta etapa"
                 @click.stop="$emit('add-activity', data.id)"
             >
-                + atividade
+                <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4" />
+                </svg>
+                <span>Atividade</span>
             </button>
         </div>
     </div>

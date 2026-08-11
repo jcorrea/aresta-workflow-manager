@@ -28,7 +28,7 @@ function statusBadgeClass(status) {
         <AppNav active="instances" />
 
         <!-- Padrão de listagem do starter kit (docs/brand/components/listagem.html). -->
-        <div class="mx-auto w-full max-w-3xl flex-1 p-6">
+        <div class="mx-auto w-full max-w-6xl flex-1 p-6">
             <div class="mb-4 flex items-center justify-between">
                 <h1 class="text-xl font-bold tracking-tight text-ink">Instâncias em andamento</h1>
             </div>
