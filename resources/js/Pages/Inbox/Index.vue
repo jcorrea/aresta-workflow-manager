@@ -12,8 +12,8 @@ const props = defineProps({
 
 const formData = reactive({});
 
-function fieldsFor(activity) {
-    return activity.workflowActivity.type === 'form' ? (activity.workflowActivity.config?.fields ?? []) : [];
+function selectOption(activity, field, value) {
+    formData[activity.id] = { ...(formData[activity.id] ?? {}), [field.key]: value };
 }
 
 function claim(activity) {
@@ -21,7 +21,7 @@ function claim(activity) {
 }
 
 function complete(activity) {
-    const fields = fieldsFor(activity);
+    const fields = activity.workflowActivity.fields;
     const payload = fields.length ? { form_data: formData[activity.id] ?? {} } : {};
 
     router.post(route('process-instance-activities.complete', activity.id), payload);
@@ -36,7 +36,7 @@ function complete(activity) {
 
         <!-- Cards no vocabulário do starter kit (raio de card, sombra suave, badges pill,
              código de instância em mono) — tarefa com formulário embutido não vira tabela. -->
-        <div class="mx-auto w-full max-w-3xl flex-1 p-6">
+        <div class="mx-auto w-full max-w-6xl flex-1 p-6">
             <div class="mb-4 flex items-center justify-between">
                 <h1 class="text-xl font-bold tracking-tight text-ink">Minhas tarefas</h1>
             </div>
@@ -70,10 +70,29 @@ function complete(activity) {
                     </div>
 
                     <template v-if="!activity.isQueued">
-                        <div v-if="fieldsFor(activity).length" class="mt-4 space-y-3">
-                            <label v-for="field in fieldsFor(activity)" :key="field.key" class="aresta-label">
+                        <div v-if="activity.workflowActivity.fields.length" class="mt-4 space-y-3">
+                            <div v-for="field in activity.workflowActivity.fields" :key="field.key" class="aresta-label">
                                 {{ field.label }}
+
+                                <div v-if="field.options" class="mt-1.5 flex flex-wrap gap-2">
+                                    <button
+                                        v-for="option in field.options"
+                                        :key="option.value"
+                                        type="button"
+                                        class="rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors"
+                                        :class="
+                                            formData[activity.id]?.[field.key] === option.value
+                                                ? 'border-accent bg-accent text-accent-ink'
+                                                : 'border-ink/10 text-ink hover:bg-ink/5'
+                                        "
+                                        @click="selectOption(activity, field, option.value)"
+                                    >
+                                        {{ option.label }}
+                                    </button>
+                                </div>
+
                                 <input
+                                    v-else
                                     :type="field.type === 'number' ? 'number' : 'text'"
                                     :required="field.required"
                                     class="aresta-input mt-1.5"
@@ -81,7 +100,7 @@ function complete(activity) {
                                         formData[activity.id] = { ...(formData[activity.id] ?? {}), [field.key]: $event.target.value }
                                     "
                                 />
-                            </label>
+                            </div>
                         </div>
 
                         <button

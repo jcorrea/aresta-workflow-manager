@@ -52,7 +52,12 @@ class ProcessInstanceActivityController extends Controller
             $activity->update(['form_data' => $data['form_data']]);
         }
 
-        app(WorkflowEngine::class)->completeActivity($activity, $data['result'] ?? []);
+        // Sem isso, uma decisão tomada num campo de formulário (ex.: "aprovado") nunca chega
+        // em `ConditionEvaluator` — ele só enxerga `result` (01-modelo-de-dados.md §3.3), e a
+        // Inbox/tela de instância só mandam `form_data`, nunca `result` explicitamente.
+        $result = $data['result'] ?? $data['form_data'] ?? [];
+
+        app(WorkflowEngine::class)->completeActivity($activity, $result);
 
         return redirect()->back(fallback: route('inbox.index'));
     }

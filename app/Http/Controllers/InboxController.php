@@ -33,7 +33,7 @@ class InboxController extends Controller
                             ->whereHas('workflowActivity', fn ($wa) => $wa->whereIn('assignee_role_id', $roleIds));
                     });
             })
-            ->with(['workflowActivity', 'processInstance'])
+            ->with(['workflowActivity.outgoingTransitions', 'processInstance'])
             ->orderBy('due_at')
             ->get()
             ->map(fn (ProcessInstanceActivity $activity) => [
@@ -48,8 +48,7 @@ class InboxController extends Controller
                 ],
                 'workflowActivity' => [
                     'name' => $activity->workflowActivity->name,
-                    'type' => $activity->workflowActivity->type->value,
-                    'config' => $activity->workflowActivity->config,
+                    'fields' => $activity->workflowActivity->fieldsWithOptions(),
                 ],
             ])
             ->values();

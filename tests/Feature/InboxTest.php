@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Enums\AssigneeType;
+use App\Enums\ConditionType;
 use App\Enums\OrganizationRole;
 use App\Enums\ProcessInstanceActivityStatus;
 use App\Enums\ProcessInstanceStatus;
@@ -15,6 +16,7 @@ use App\Models\User;
 use App\Models\Workflow;
 use App\Models\WorkflowActivity;
 use App\Models\WorkflowStep;
+use App\Models\WorkflowTransition;
 use App\Models\WorkflowVersion;
 use App\Notifications\ActivityClaimedByAnotherNotification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -322,5 +324,225 @@ class InboxTest extends TestCase
 
         $this->assertSame(['valor' => '1500'], $activity->fresh()->form_data);
         $this->assertSame(ProcessInstanceActivityStatus::Completed, $activity->fresh()->status);
+    }
+
+    /**
+     * `form_data` sozinho não bastava pra `WorkflowEngine::advance()` decidir nada — só
+     * `result` é avaliado por `ConditionEvaluator` (01-modelo-de-dados.md §3.3). A Inbox nunca
+     * manda `result` explicitamente, então a decisão do formulário (ex.: campo "aprovado")
+     * tem que virar `result` no próprio controller pra transições condicionais funcionarem.
+     */
+    public function test_completing_a_form_activity_uses_its_data_to_evaluate_the_next_transition(): void
+    {
+        $me = User::factory()->create();
+        $this->org->users()->attach($me);
+
+        $decision = WorkflowActivity::factory()->for($this->step, 'workflowStep')->create([
+            'type' => WorkflowActivityType::Form,
+            'assignee_type' => AssigneeType::User,
+            'assignee_user_id' => $me->id,
+            'config' => ['fields' => [['key' => 'aprovado', 'label' => 'Aprovado?', 'type' => 'checkbox', 'required' => true]]],
+        ]);
+        $approved = WorkflowActivity::factory()->for($this->step, 'workflowStep')->create(['is_end' => true, 'type' => WorkflowActivityType::Condition]);
+        $rejected = WorkflowActivity::factory()->for($this->step, 'workflowStep')->create(['is_end' => true, 'type' => WorkflowActivityType::Condition]);
+
+        WorkflowTransition::factory()->for($this->version, 'workflowVersion')->create([
+            'from_activity_id' => $decision->id,
+            'to_activity_id' => $approved->id,
+            'condition_type' => ConditionType::Expression,
+            'condition_expression' => ['field' => 'result.aprovado', 'operator' => '=', 'value' => true],
+            'sort_order' => 0,
+        ]);
+        WorkflowTransition::factory()->for($this->version, 'workflowVersion')->create([
+            'from_activity_id' => $decision->id,
+            'to_activity_id' => $rejected->id,
+            'condition_type' => ConditionType::Expression,
+            'condition_expression' => ['field' => 'result.aprovado', 'operator' => '=', 'value' => false],
+            'sort_order' => 1,
+        ]);
+
+        $instance = $this->makeInstance();
+        $activity = ProcessInstanceActivity::factory()->for($instance, 'processInstance')->for($decision, 'workflowActivity')->create([
+            'assigned_user_id' => $me->id,
+            'status' => ProcessInstanceActivityStatus::Pending,
+        ]);
+
+        $this->actingAs($me)->post(route('process-instance-activities.complete', $activity), [
+            'form_data' => ['aprovado' => false],
+        ]);
+
+        $this->assertSame(['aprovado' => false], $activity->fresh()->result);
+        $this->assertSame(ProcessInstanceStatus::Completed, $instance->fresh()->status);
+        $this->assertTrue($instance->activities()->where('workflow_activity_id', $rejected->id)->exists());
+        $this->assertFalse($instance->activities()->where('workflow_activity_id', $approved->id)->exists());
+    }
+
+    /**
+     * Um campo de texto (`decisao`) seguido de duas transições `expression` testando
+     * `context.decisao = "aprovado"`/`"reprovado"` por igualdade deve chegar na Inbox já com
+     * `options` derivadas dessas transições — a tela troca o `<input>` livre por botões, sem o
+     * usuário ter que adivinhar o valor esperado pelo desenho.
+     */
+    public function test_inbox_exposes_decision_options_derived_from_outgoing_expression_transitions(): void
+    {
+        $me = User::factory()->create();
+        $this->org->users()->attach($me);
+
+        $decision = WorkflowActivity::factory()->for($this->step, 'workflowStep')->create([
+            'type' => WorkflowActivityType::Form,
+            'assignee_type' => AssigneeType::User,
+            'assignee_user_id' => $me->id,
+            'config' => ['fields' => [['key' => 'decisao', 'label' => 'Decisão', 'type' => 'text', 'required' => true]]],
+        ]);
+        $approved = WorkflowActivity::factory()->for($this->step, 'workflowStep')->create(['is_end' => true]);
+        $rejected = WorkflowActivity::factory()->for($this->step, 'workflowStep')->create(['is_end' => true]);
+
+        WorkflowTransition::factory()->for($this->version, 'workflowVersion')->create([
+            'from_activity_id' => $decision->id,
+            'to_activity_id' => $approved->id,
+            'condition_type' => ConditionType::Expression,
+            'condition_expression' => ['field' => 'context.decisao', 'operator' => '=', 'value' => 'aprovado'],
+            'label' => 'Aprovado',
+            'sort_order' => 0,
+        ]);
+        WorkflowTransition::factory()->for($this->version, 'workflowVersion')->create([
+            'from_activity_id' => $decision->id,
+            'to_activity_id' => $rejected->id,
+            'condition_type' => ConditionType::Expression,
+            'condition_expression' => ['field' => 'context.decisao', 'operator' => '=', 'value' => 'reprovado'],
+            'label' => 'Reprovado',
+            'sort_order' => 1,
+        ]);
+
+        $instance = $this->makeInstance();
+        ProcessInstanceActivity::factory()->for($instance, 'processInstance')->for($decision, 'workflowActivity')->create([
+            'assigned_user_id' => $me->id,
+            'status' => ProcessInstanceActivityStatus::Pending,
+        ]);
+
+        $response = $this->actingAs($me)->get(route('inbox.index'));
+
+        $response->assertInertia(fn ($page) => $page->where('activities.0.workflowActivity.fields.0.options', [
+            ['value' => 'aprovado', 'label' => 'Aprovado'],
+            ['value' => 'reprovado', 'label' => 'Reprovado'],
+        ]));
+    }
+
+    /**
+     * Mesmo cenário acima, mas com um nó `condition` dedicado entre o `form` e os dois fins
+     * (padrão "losango" mais visual no editor) em vez das transições `expression` saírem
+     * direto do `form`: `form` --always--> `condition` --expression×2--> fins. As opções ainda
+     * devem aparecer no campo do `form`, porque é ele quem coleta o valor — `condition` só
+     * ramifica sozinho ao ser alcançado, nunca tem `config.fields` (`WorkflowEngine::
+     * activateActivity()`).
+     */
+    public function test_inbox_exposes_decision_options_derived_through_an_intermediate_condition_node(): void
+    {
+        $me = User::factory()->create();
+        $this->org->users()->attach($me);
+
+        $decision = WorkflowActivity::factory()->for($this->step, 'workflowStep')->create([
+            'type' => WorkflowActivityType::Form,
+            'assignee_type' => AssigneeType::User,
+            'assignee_user_id' => $me->id,
+            'config' => ['fields' => [['key' => 'decisao', 'label' => 'Decisão', 'type' => 'text', 'required' => true]]],
+        ]);
+        $condition = WorkflowActivity::factory()->for($this->step, 'workflowStep')->create([
+            'type' => WorkflowActivityType::Condition,
+            'config' => ['description' => 'Decisão sobre a proposta'],
+        ]);
+        $approved = WorkflowActivity::factory()->for($this->step, 'workflowStep')->create(['is_end' => true]);
+        $rejected = WorkflowActivity::factory()->for($this->step, 'workflowStep')->create(['is_end' => true]);
+
+        WorkflowTransition::factory()->for($this->version, 'workflowVersion')->create([
+            'from_activity_id' => $decision->id,
+            'to_activity_id' => $condition->id,
+            'condition_type' => ConditionType::Always,
+            'sort_order' => 0,
+        ]);
+        WorkflowTransition::factory()->for($this->version, 'workflowVersion')->create([
+            'from_activity_id' => $condition->id,
+            'to_activity_id' => $approved->id,
+            'condition_type' => ConditionType::Expression,
+            'condition_expression' => ['field' => 'context.decisao', 'operator' => '=', 'value' => 'aprovado'],
+            'label' => 'Aprovado',
+            'sort_order' => 0,
+        ]);
+        WorkflowTransition::factory()->for($this->version, 'workflowVersion')->create([
+            'from_activity_id' => $condition->id,
+            'to_activity_id' => $rejected->id,
+            'condition_type' => ConditionType::Expression,
+            'condition_expression' => ['field' => 'context.decisao', 'operator' => '=', 'value' => 'reprovado'],
+            'label' => 'Reprovado',
+            'sort_order' => 1,
+        ]);
+
+        $instance = $this->makeInstance();
+        ProcessInstanceActivity::factory()->for($instance, 'processInstance')->for($decision, 'workflowActivity')->create([
+            'assigned_user_id' => $me->id,
+            'status' => ProcessInstanceActivityStatus::Pending,
+        ]);
+
+        $response = $this->actingAs($me)->get(route('inbox.index'));
+
+        $response->assertInertia(fn ($page) => $page->where('activities.0.workflowActivity.fields.0.options', [
+            ['value' => 'aprovado', 'label' => 'Aprovado'],
+            ['value' => 'reprovado', 'label' => 'Reprovado'],
+        ]));
+    }
+
+    /**
+     * `assignee_type = external` (04-integracao-e-notificacoes.md §5) marca uma atividade
+     * humana que nunca é de um usuário do Aresta — só completável via API pública, mesmo por
+     * quem tem override administrativo, ninguém assume/completa isso pela Inbox.
+     */
+    public function test_external_assignee_activity_cannot_be_claimed_via_inbox(): void
+    {
+        $admin = User::factory()->create();
+        $this->org->users()->attach($admin);
+        app(PermissionRegistrar::class)->setPermissionsTeamId($this->org->id);
+        $admin->assignRole(OrganizationRole::Admin->value);
+        app(PermissionRegistrar::class)->setPermissionsTeamId(0);
+
+        $instance = $this->makeInstance();
+        $workflowActivity = WorkflowActivity::factory()->for($this->step, 'workflowStep')->create([
+            'type' => WorkflowActivityType::Form,
+            'assignee_type' => AssigneeType::External,
+        ]);
+        $activity = ProcessInstanceActivity::factory()->for($instance, 'processInstance')->for($workflowActivity, 'workflowActivity')->create([
+            'assigned_user_id' => null,
+            'status' => ProcessInstanceActivityStatus::Pending,
+        ]);
+
+        $this->actingAs($admin)
+            ->post(route('process-instance-activities.claim', $activity))
+            ->assertForbidden();
+
+        $this->assertNull($activity->fresh()->assigned_user_id);
+    }
+
+    public function test_external_assignee_activity_cannot_be_completed_via_inbox_even_by_an_admin(): void
+    {
+        $admin = User::factory()->create();
+        $this->org->users()->attach($admin);
+        app(PermissionRegistrar::class)->setPermissionsTeamId($this->org->id);
+        $admin->assignRole(OrganizationRole::Admin->value);
+        app(PermissionRegistrar::class)->setPermissionsTeamId(0);
+
+        $instance = $this->makeInstance();
+        $workflowActivity = WorkflowActivity::factory()->for($this->step, 'workflowStep')->create([
+            'type' => WorkflowActivityType::Form,
+            'assignee_type' => AssigneeType::External,
+        ]);
+        $activity = ProcessInstanceActivity::factory()->for($instance, 'processInstance')->for($workflowActivity, 'workflowActivity')->create([
+            'assigned_user_id' => null,
+            'status' => ProcessInstanceActivityStatus::Pending,
+        ]);
+
+        $this->actingAs($admin)
+            ->post(route('process-instance-activities.complete', $activity), ['result' => ['ok' => true]])
+            ->assertForbidden();
+
+        $this->assertSame(ProcessInstanceActivityStatus::Pending, $activity->fresh()->status);
     }
 }
