@@ -68,8 +68,36 @@ class ProcessInstanceViewerTest extends TestCase
             ->assertInertia(fn ($page) => $page
                 ->component('ProcessInstances/Show')
                 ->where('instance.code', $instance->code)
+                ->where('workflow.id', $workflow->id)
+                ->where('workflow.draftVersionId', null)
                 ->has('graph.nodes')
                 ->has('graph.edges')
+            );
+    }
+
+    public function test_show_exposes_the_draft_version_id_when_one_exists_for_the_edit_link(): void
+    {
+        $org = Organization::factory()->create();
+        $user = User::factory()->create();
+        $org->users()->attach($user);
+        $registrar = app(PermissionRegistrar::class);
+        $registrar->setPermissionsTeamId($org->id);
+        $user->assignRole(OrganizationRole::Viewer->value);
+        $registrar->setPermissionsTeamId(0);
+
+        $workflow = Workflow::factory()->for($org)->for($user, 'createdBy')->create();
+        $version = WorkflowVersion::factory()->for($workflow)->for($user, 'createdBy')->published()->create();
+        $draft = WorkflowVersion::factory()->for($workflow)->for($user, 'createdBy')->create();
+        $instance = ProcessInstance::factory()->for($version, 'workflowVersion')->create([
+            'organization_id' => $org->id,
+            'started_by' => $user->id,
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('process-instances.show', $instance->code))
+            ->assertInertia(fn ($page) => $page
+                ->component('ProcessInstances/Show')
+                ->where('workflow.draftVersionId', $draft->id)
             );
     }
 

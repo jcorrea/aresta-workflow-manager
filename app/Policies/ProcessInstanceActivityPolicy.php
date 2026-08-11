@@ -2,6 +2,7 @@
 
 namespace App\Policies;
 
+use App\Enums\AssigneeType;
 use App\Enums\OrganizationRole;
 use App\Models\ProcessInstanceActivity;
 use App\Models\User;
@@ -17,6 +18,10 @@ class ProcessInstanceActivityPolicy
 {
     public function complete(User $user, ProcessInstanceActivity $activity): bool
     {
+        if ($activity->workflowActivity->assignee_type === AssigneeType::External) {
+            return false;
+        }
+
         if ($activity->assigned_user_id === $user->id) {
             return true;
         }
@@ -34,6 +39,10 @@ class ProcessInstanceActivityPolicy
      */
     public function claim(User $user, ProcessInstanceActivity $activity): bool
     {
+        if ($activity->workflowActivity->assignee_type === AssigneeType::External) {
+            return false;
+        }
+
         return $activity->assigned_user_id === null && $this->isEligibleForQueue($user, $activity);
     }
 

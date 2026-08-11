@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\WorkflowVersionStatus;
 use App\Exceptions\WorkflowNotPublishedException;
 use App\Models\ProcessInstance;
 use App\Models\ProcessInstanceActivity;
@@ -81,7 +82,11 @@ class ProcessInstanceController extends Controller
 
     public function show(Request $request, ProcessInstance $instance): Response
     {
-        Gate::authorize('view', $instance->workflowVersion->workflow);
+        $workflow = $instance->workflowVersion->workflow;
+
+        Gate::authorize('view', $workflow);
+
+        $workflow->load(['versions' => fn ($query) => $query->where('status', WorkflowVersionStatus::Draft)]);
 
         return Inertia::render('ProcessInstances/Show', [
             'instance' => [
@@ -89,6 +94,11 @@ class ProcessInstanceController extends Controller
                 'code' => $instance->code,
                 'name' => $instance->name,
                 'status' => $instance->status->value,
+            ],
+            'workflow' => [
+                'id' => $workflow->id,
+                'name' => $workflow->name,
+                'draftVersionId' => $workflow->versions->first()?->id,
             ],
             'graph' => $instance->toGraphPayload(),
             'tasks' => $this->tasksPayload($instance, $request->user()),
@@ -109,7 +119,7 @@ class ProcessInstanceController extends Controller
     private function tasksPayload(ProcessInstance $instance, $user): array
     {
         return $instance->activities()
-            ->with(['workflowActivity', 'assignedUser'])
+            ->with(['workflowActivity.outgoingTransitions', 'assignedUser'])
             ->get()
             ->sortBy([['started_at', 'asc'], ['id', 'asc']])
             ->map(fn (ProcessInstanceActivity $activity) => [
@@ -119,11 +129,13 @@ class ProcessInstanceController extends Controller
                 'type' => $activity->workflowActivity->type->value,
                 'status' => $activity->status->value,
                 'assignedUserName' => $activity->assignedUser?->name,
+                'completedByExternalName' => $activity->completed_by_external_name,
+                'externalAttributionNeedsReview' => $activity->external_attribution_needs_review,
                 'isQueued' => $activity->assigned_user_id === null,
                 'startedAt' => $activity->started_at?->toIso8601String(),
                 'completedAt' => $activity->completed_at?->toIso8601String(),
                 'dueAt' => $activity->due_at?->toIso8601String(),
-                'fields' => $activity->workflowActivity->type->value === 'form' ? ($activity->workflowActivity->config['fields'] ?? []) : [],
+                'fields' => $activity->workflowActivity->fieldsWithOptions(),
                 'canComplete' => Gate::forUser($user)->allows('complete', $activity),
                 'canClaim' => Gate::forUser($user)->allows('claim', $activity),
             ])

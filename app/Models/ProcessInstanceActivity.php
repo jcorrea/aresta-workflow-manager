@@ -30,6 +30,9 @@ class ProcessInstanceActivity extends Model
         'sla_overdue_notified_at',
         'started_at',
         'completed_at',
+        'completed_by_external_name',
+        'completed_by_external_email',
+        'external_attribution_needs_review',
     ];
 
     protected static function booted(): void
@@ -48,6 +51,7 @@ class ProcessInstanceActivity extends Model
             'sla_overdue_notified_at' => 'datetime',
             'started_at' => 'datetime',
             'completed_at' => 'datetime',
+            'external_attribution_needs_review' => 'boolean',
         ];
     }
 

@@ -1,6 +1,6 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
-import { Head, router } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import { route } from 'ziggy-js';
 import { VueFlow, useVueFlow } from '@vue-flow/core';
 import { Background } from '@vue-flow/background';
@@ -11,9 +11,18 @@ import AppNav from '@/Components/AppNav.vue';
 
 const props = defineProps({
     instance: { type: Object, required: true },
+    workflow: { type: Object, required: true },
     graph: { type: Object, required: true },
     tasks: { type: Array, required: true },
 });
+
+// Se houver rascunho, volta direto pro editor visual; senão cai na tela de detalhes do
+// workflow, de onde dá pra criar um novo rascunho (mesmo fluxo de Workflows/Show.vue).
+const editWorkflowHref = computed(() =>
+    props.workflow.draftVersionId
+        ? route('workflows.versions.edit', [props.workflow.id, props.workflow.draftVersionId])
+        : route('workflows.show', props.workflow.id),
+);
 
 const { fitView } = useVueFlow();
 
@@ -77,6 +86,10 @@ const statusBadgeClass = {
 // atividade já está atribuída a alguém (o próprio usuário, via `canClaim`/`canComplete`
 // calculados no servidor pela policy).
 const formData = reactive({});
+
+function selectOption(task, field, value) {
+    formData[task.id] = { ...(formData[task.id] ?? {}), [field.key]: value };
+}
 
 function isOpen(task) {
     return task.status === 'pending' || task.status === 'in_progress';
@@ -154,6 +167,15 @@ onBeforeUnmount(stopPolling);
                 <h1 class="text-sm font-semibold text-ink">{{ instance.name }}</h1>
                 <p class="text-xs text-ink/60">{{ instance.code }} — {{ instance.status }}</p>
             </div>
+            <Link
+                :href="editWorkflowHref"
+                class="flex items-center gap-1.5 rounded-lg border border-ink/10 px-3 py-1.5 text-xs font-semibold text-ink transition-colors hover:bg-ink/5"
+            >
+                <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+                <span>Ir para edição do workflow</span>
+            </Link>
         </header>
 
         <div class="flex flex-1 overflow-hidden">
@@ -207,7 +229,16 @@ onBeforeUnmount(stopPolling);
                                     {{ statusLabels[task.status] ?? task.status }}
                                 </span>
                                 <span v-if="task.assignedUserName" class="text-[11px] text-ink/60">{{ task.assignedUserName }}</span>
+                                <span v-else-if="task.completedByExternalName" class="text-[11px] text-ink/60">
+                                    {{ task.completedByExternalName }} (integração externa)
+                                </span>
                                 <span v-else-if="task.isQueued" class="text-[11px] text-ink/60">na fila</span>
+                                <span
+                                    v-if="task.externalAttributionNeedsReview"
+                                    class="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800"
+                                >
+                                    revisar vínculo
+                                </span>
                             </div>
                         </button>
 
@@ -222,15 +253,34 @@ onBeforeUnmount(stopPolling);
                             </button>
 
                             <template v-else>
-                                <label v-for="field in task.fields" :key="field.key" class="aresta-label block">
+                                <div v-for="field in task.fields" :key="field.key" class="aresta-label block">
                                     {{ field.label }}
+
+                                    <div v-if="field.options" class="mt-1 flex flex-wrap gap-1.5">
+                                        <button
+                                            v-for="option in field.options"
+                                            :key="option.value"
+                                            type="button"
+                                            class="rounded-lg border px-2.5 py-1 text-xs font-semibold transition-colors"
+                                            :class="
+                                                formData[task.id]?.[field.key] === option.value
+                                                    ? 'border-accent bg-accent text-accent-ink'
+                                                    : 'border-ink/10 text-ink hover:bg-ink/5'
+                                            "
+                                            @click="selectOption(task, field, option.value)"
+                                        >
+                                            {{ option.label }}
+                                        </button>
+                                    </div>
+
                                     <input
+                                        v-else
                                         :type="field.type === 'number' ? 'number' : 'text'"
                                         :required="field.required"
                                         class="aresta-input mt-1"
                                         @input="formData[task.id] = { ...(formData[task.id] ?? {}), [field.key]: $event.target.value }"
                                     />
-                                </label>
+                                </div>
 
                                 <button
                                     type="button"
