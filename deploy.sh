@@ -1,38 +1,26 @@
 #!/usr/bin/env bash
-# deploy.sh — executado NO servidor Hostinger (shared hosting) via SSH pelo GitHub Actions.
+# deploy.sh — executado NO servidor Hostinger via SSH pelo GitHub Actions.
 #
-# Localização no servidor: ~/aresta-workflow/deploy.sh
-#
-# Estrutura esperada no servidor:
-#   ~/aresta-workflow/        ← código Laravel (document root = ./public)
-#   ├── deploy.sh             ← este arquivo
-#   ├── public/               ← webroot (configurado no hPanel como Document Root do subdomínio)
-#   │   ├── index.php
-#   │   └── build/            ← assets Vite (enviados pelo GitHub Actions via SCP)
-#   ├── .env
-#   ├── artisan
-#   └── ...
-#
-# Configuração no hPanel da Hostinger:
-#   Subdomínios → workflow.seusite.com → Editar → Document Root:
-#   /home/USUARIO/aresta-workflow/public
+# Estrutura no servidor:
+#   CORE_DIR (Privado): ~/apps/aresta-workflow
+#   WEB_DIR  (Público): ~/domains/acertars.com.br/public_html/aresta-workflow
 #
 # Permissão: chmod +x deploy.sh
 
 set -euo pipefail
 
-# ── Configuração ──────────────────────────────────────────────────────────────
-APP_DIR=~/aresta-workflow
+# ── Configuração de Caminhos ──────────────────────────────────────────────────
+# 1. Onde fica o código-fonte (fora de domains/)
+CORE_DIR="$HOME/aresta-workflow"
 
-# Caminhos absolutos, não nomes soltos ('php'/'composer') — a sessão SSH não-interativa
-# que o GitHub Actions abre (appleboy/ssh-action) não carrega ~/.bashrc/.bash_profile
-# do mesmo jeito que uma sessão interativa, e pode resolver um PHP diferente do que
-# 'php -v' mostra quando você testa manualmente logado por SSH. Confirme com
-# 'which php' / 'which composer' numa sessão interativa e ajuste aqui se mudar.
+# 2. Onde fica a pasta pública servida pelo Apache/LiteSpeed
+WEB_DIR="$HOME/domains/acertars.com.br/public_html/aresta-workflow"
+
+# Binários do PHP e Composer (Ajuste se necessário)
 PHP=/usr/bin/php
 COMPOSER_BIN=/usr/local/bin/composer
 
-cd "$APP_DIR"
+cd "$CORE_DIR"
 
 echo "──────────────────────────────────────────"
 echo " Deploy iniciado: $(date '+%Y-%m-%d %H:%M:%S')"
@@ -40,17 +28,15 @@ echo "────────────────────────�
 
 # ── 1. Validação do .env ─────────────────────────────────────────────────────
 if [[ ! -f .env ]]; then
-  echo "ERRO: arquivo .env não encontrado em $APP_DIR"
+  echo "ERRO: arquivo .env não encontrado em $CORE_DIR"
   echo "      Crie-o a partir de .env.example e rode: php artisan key:generate"
   exit 1
 fi
 
-# Variáveis obrigatórias para a app funcionar em produção
 REQUIRED_VARS=(APP_KEY APP_ENV DB_HOST DB_DATABASE DB_USERNAME DB_PASSWORD)
 MISSING=()
 
 for VAR in "${REQUIRED_VARS[@]}"; do
-  # Extrai o valor da variável no .env (ignora linhas comentadas)
   VALUE=$(grep -E "^${VAR}=" .env | cut -d'=' -f2- | tr -d '"' | tr -d "'" | xargs)
   if [[ -z "$VALUE" ]]; then
     MISSING+=("$VAR")
@@ -65,7 +51,6 @@ if [[ ${#MISSING[@]} -gt 0 ]]; then
   exit 1
 fi
 
-# Garante que não estamos em debug mode em produção
 DEBUG=$(grep -E '^APP_DEBUG=' .env | cut -d'=' -f2- | tr -d '"' | tr -d "'" | xargs | tr '[:upper:]' '[:lower:]')
 if [[ "$DEBUG" == "true" ]]; then
   echo "AVISO: APP_DEBUG=true em produção. Considere desativar."
@@ -74,8 +59,6 @@ fi
 echo " .env validado com sucesso."
 
 # ── 2. Modo de manutenção ────────────────────────────────────────────────────
-# SHARED HOSTING: 'artisan down' cria storage/framework/maintenance.php — não
-# precisa de root; basta permissão de escrita na pasta storage (já é do usuário).
 $PHP artisan down --retry=10 --render="errors::503"
 
 trap '$PHP artisan up; echo "ERRO — modo de manutenção desativado automaticamente."' ERR
@@ -84,30 +67,42 @@ trap '$PHP artisan up; echo "ERRO — modo de manutenção desativado automatica
 git pull origin main --ff-only
 
 # ── 4. Dependências PHP ───────────────────────────────────────────────────────
-# shared hosting costuma desabilitar proc_open (disable_functions do php.ini, por
-# segurança) — sem isso, o Composer trava tentando rodar o script 'post-autoload-dump'
-# (@php artisan package:discover) como subprocesso. --no-scripts deveria bastar, mas
-# nesse host o Composer instalado ignora a flag e tenta rodar o hook mesmo assim (só
-# esse hook falha — os pacotes já foram baixados e o autoload já foi gerado antes
-# disso, "Nothing to install" + "Generating optimized autoload files" já rodaram).
-# Por isso não confiamos só na flag: se o composer falhar, seguimos assim mesmo e
-# rodamos o package:discover manualmente (dentro do processo do artisan, sem
-# proc_open) — só falha de verdade se isso aqui também falhar.
 if ! $PHP "$COMPOSER_BIN" install --no-dev --optimize-autoloader --no-interaction --prefer-dist --no-scripts; then
-  echo "AVISO: composer install saiu com erro (esperado se for só o hook post-autoload-dump por causa do proc_open desabilitado — seguindo com package:discover manual)."
+  echo "AVISO: composer install saiu com erro (esperado por conta do proc_open desabilitado)."
 fi
 $PHP artisan package:discover --ansi
 
 # ── 5. Migrations ─────────────────────────────────────────────────────────────
 $PHP artisan migrate --force
 
-# Symlink de storage/app/public → public/storage — necessário pra logo/favicon enviados
-# em /admin/app-settings (App\Models\AppSetting, disco 'public') ficarem acessíveis via
-# HTTP. '--force' recria o link se já existir, pra não quebrar deploys seguintes (o
-# comando erra em "already exists" sem essa flag).
-$PHP artisan storage:link --force
+# ── 6. Otimização de Assets e Filament ────────────────────────────────────────
+$PHP artisan filament:assets
+$PHP artisan filament:optimize
 
-# ── 6. Limpar e re-otimizar caches ────────────────────────────────────────────
+# ── 7. Sincronização e Patch do Webroot ───────────────────────────────────────
+echo " Sincronizando arquivos públicos para $WEB_DIR..."
+
+# Garante que a pasta pública de destino existe
+mkdir -p "$WEB_DIR"
+
+# Copia todo o conteúdo da pasta public/ do Laravel para o diretório Web
+rsync -av --delete "$CORE_DIR/public/" "$WEB_DIR/"
+
+# Aplica o patch no index.php do diretório Web para encontrar o CORE
+echo " Ajustando caminhos de bootstrap no $WEB_DIR/index.php..."
+sed -i "s|__DIR__\.'/../vendor|$CORE_DIR/vendor|g" "$WEB_DIR/index.php"
+sed -i "s|__DIR__\.'/../bootstrap|$CORE_DIR/bootstrap|g" "$WEB_DIR/index.php"
+sed -i "s|__DIR__\.'/../storage|$CORE_DIR/storage|g" "$WEB_DIR/index.php"
+
+# ── 8. Storage Link Personalizado ─────────────────────────────────────────────
+# Cria o link simbólico diretamente da pasta WEB para a pasta pública do Storage
+if [[ -L "$WEB_DIR/storage" || -d "$WEB_DIR/storage" ]]; then
+  rm -rf "$WEB_DIR/storage"
+fi
+ln -s "$CORE_DIR/storage/app/public" "$WEB_DIR/storage"
+echo " Link simbólico do storage gerado com sucesso."
+
+# ── 9. Otimização de Caches ───────────────────────────────────────────────────
 $PHP artisan config:clear
 $PHP artisan route:clear
 $PHP artisan view:clear
@@ -118,23 +113,13 @@ $PHP artisan route:cache
 $PHP artisan view:cache
 $PHP artisan event:cache
 
-# 'composer install' roda com --no-scripts (ver comentário acima), então o hook
-# post-autoload-dump que normalmente chama 'filament:upgrade' (e publica os
-# assets do painel — JS/CSS/fontes — em public/{js,css,fonts}/filament) nunca
-# roda em produção. 'filament:optimize' NÃO publica assets, só cacheia
-# componentes/ícones — sem este passo as pastas de asset do Filament ficam
-# vazias/desatualizadas e as telas do /admin quebram com 404.
-$PHP artisan filament:assets
-$PHP artisan filament:optimize
-
-# ── 7. Permissões ─────────────────────────────────────────────────────────────
-# SHARED HOSTING: sem sudo, sem chown www-data — o usuário SSH é o mesmo dono
-# dos arquivos executados pelo servidor web. Apenas garante permissões de escrita.
+# ── 10. Permissões ────────────────────────────────────────────────────────────
 chmod -R 775 storage bootstrap/cache
+chmod -R 755 "$WEB_DIR"
 
-# ── 8. Sair do modo de manutenção ────────────────────────────────────────────
+# ── 11. Sair do modo de manutenção ───────────────────────────────────────────
 $PHP artisan up
 
 echo "──────────────────────────────────────────"
-echo " Deploy concluído: $(date '+%Y-%m-%d %H:%M:%S')"
+echo " Deploy concluído com sucesso: $(date '+%Y-%m-%d %H:%M:%S')"
 echo "──────────────────────────────────────────"

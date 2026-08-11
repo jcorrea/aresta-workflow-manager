@@ -13,12 +13,11 @@ services:
       - "${APP_PORT:-8000}:8000"
     environment:
       APP_ENV: local
-      DB_CONNECTION: mysql
-      DB_HOST: mysql
-      DB_PORT: 3307
-      DB_DATABASE: ${DB_DATABASE:-aresta_workflow}
-      DB_USERNAME: ${DB_USERNAME:-aresta_workflow}
-      DB_PASSWORD: ${DB_PASSWORD:-aresta_workflow}
+      # Teste de integração com giits-propostas: aponta pro mesmo sqlite usado fora do
+      # compose (bin/artisan), onde está o workflow real "Processo de propostas" — o mysql
+      # abaixo tem só dados de demonstração divergentes. Reverter pra mysql quando as duas
+      # bases forem unificadas de novo.
+      DB_CONNECTION: sqlite
       # Ollama roda como serviço deste compose (ver `ollama` abaixo) — alcançado pelo nome do
       # serviço na rede interna, mesmo padrão do DB_HOST acima.
       OLLAMA_URL: http://ollama:11434
