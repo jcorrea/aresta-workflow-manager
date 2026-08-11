@@ -125,6 +125,10 @@ encontrados" persistente):
   vermelho tanto o fork quanto o(s) nó(s) que quebram o pareamento (não só um "erro genérico"), para
   o usuário conseguir corrigir sem precisar entender a teoria de grafos por trás.
 
+  Para quem não quer resolver isso manualmente, o botão "Ajustar com IA" vira "Corrigir Erros com
+  IA" e pré-preenche a correção sugerida a partir desses mesmos problemas — ver
+  `06-refinamento-ia-editor.md` §2, item 3.
+
 ## 7. Modo somente-leitura (reuso do mesmo componente para acompanhar instâncias — fase 6)
 
 O mesmo componente Vue Flow é reaproveitado, em modo não-editável, para visualizar uma

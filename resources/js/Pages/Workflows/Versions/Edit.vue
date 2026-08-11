@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, watch, toRaw } from 'vue';
-import { Head, router } from '@inertiajs/vue3';
+import { Head, router, useForm } from '@inertiajs/vue3';
 import { VueFlow, useVueFlow } from '@vue-flow/core';
 import { Background } from '@vue-flow/background';
 import { Controls } from '@vue-flow/controls';
@@ -10,6 +10,7 @@ import ActivityNode from '@/Components/Workflow/ActivityNode.vue';
 import StepNode from '@/Components/Workflow/StepNode.vue';
 import AiRefineModal from '@/Components/Workflow/AiRefineModal.vue';
 import AppNav from '@/Components/AppNav.vue';
+import Modal from '@/Components/Modal.vue';
 
 const props = defineProps({
     workflow: { type: Object, required: true },
@@ -29,6 +30,26 @@ const publishing = ref(false);
 const publishErrors = ref([]);
 const showAiModal = ref(false);
 
+const showStartModal = ref(false);
+const startForm = useForm({
+    name: '',
+    context: '',
+});
+
+function openStartModal() {
+    showStartModal.value = true;
+}
+
+function closeStartModal() {
+    showStartModal.value = false;
+    startForm.reset();
+    startForm.clearErrors();
+}
+
+function submitStart() {
+    startForm.post(route('process-instances.store', props.workflow.id));
+}
+
 watch(
     () => props.graph,
     (newGraph) => {
@@ -46,6 +67,32 @@ const dbIdFromNodeId = (nodeId) => Number(nodeId.split('-').pop());
 
 const errorIssues = computed(() => props.issues.filter((i) => i.severity === 'error'));
 const warningIssues = computed(() => props.issues.filter((i) => i.severity === 'warning'));
+
+// Pré-preenche o modal de IA com os erros do WorkflowGraphValidator quando existem, pra virar um
+// atalho de correção em vez de só refinamento livre — mas o texto continua editável, o usuário
+// confirma antes de enviar (ver docs/specs/06-refinamento-ia-editor.md).
+const suggestedFixInstructions = computed(() => {
+    if (!errorIssues.value.length) return '';
+
+    const header = 'Corrija os seguintes problemas estruturais do processo, sem alterar o restante do fluxo além do necessário para resolvê-los:';
+    const lines = errorIssues.value.map((issue) => `- ${issue.message}`);
+
+    let text = `${header}\n${lines.join('\n')}`;
+    const MAX_LENGTH = 1900; // backend valida instructions com max:2000 (WorkflowVersionController)
+
+    if (text.length > MAX_LENGTH) {
+        let truncated = [];
+        let length = header.length + 1;
+        for (const line of lines) {
+            if (length + line.length + 1 > MAX_LENGTH) break;
+            truncated.push(line);
+            length += line.length + 1;
+        }
+        text = `${header}\n${truncated.join('\n')}\n- ...e mais ${lines.length - truncated.length} problema(s).`;
+    }
+
+    return text;
+});
 
 const selectedStep = computed(() => {
     if (selected.value?.kind !== 'step') return null;
@@ -245,9 +292,37 @@ async function updateTransition(patch) {
     const transition = selectedTransition.value;
     if (!transition) return;
 
-    await axios.patch(route('workflow-transitions.update', transition.data.id), patch);
+    // `transition.data` guarda as chaves em camelCase (mesmo formato de `toGraphPayload()`), mas
+    // a API espera snake_case — traduzir aqui, num único lugar, evita que cada @change do
+    // template precise acertar as duas grafias (era exatamente esse descompasso que fazia o
+    // patch gravar em `data.condition_expression`, uma chave nova, enquanto os inputs liam de
+    // `data.conditionExpression`: parecia não salvar, e cada edição subsequente reconstruía o
+    // JSON a partir da cópia camelCase nunca atualizada, apagando o que tinha sido digitado antes).
+    const apiPatch = {};
+    if ('label' in patch) apiPatch.label = patch.label;
+    if ('conditionType' in patch) apiPatch.condition_type = patch.conditionType;
+    if ('conditionExpression' in patch) apiPatch.condition_expression = patch.conditionExpression;
+
+    await axios.patch(route('workflow-transitions.update', transition.data.id), apiPatch);
     Object.assign(transition.data, patch);
     if ('label' in patch) transition.label = patch.label;
+}
+
+// O `<select>` de Operador mostra "= igual" pré-selecionado mesmo quando nada foi salvo ainda —
+// sem esse default explícito, editar só Campo ou só Valor grava um `condition_expression` sem
+// `operator`, e o motor trata `operator` ausente como "nunca bate" (ConditionEvaluator::evaluate).
+// Mesclar os defaults antes do que já foi salvo garante que a primeira edição de qualquer um dos
+// três campos já grava os três, refletindo o que a tela mostra.
+function conditionExpressionOf(transition) {
+    return { field: '', operator: '=', value: '', ...(transition?.data?.conditionExpression ?? {}) };
+}
+
+function onConditionTypeChange(value) {
+    const patch = { conditionType: value };
+    if (value === 'expression' && !selectedTransition.value?.data?.conditionExpression) {
+        patch.conditionExpression = conditionExpressionOf(selectedTransition.value);
+    }
+    updateTransition(patch);
 }
 
 async function deleteSelected() {
@@ -305,12 +380,24 @@ function publish() {
             </div>
             <div class="flex items-center gap-2">
                 <button
+                    v-if="workflow.currentPublishedVersionNumber"
                     type="button"
-                    class="flex items-center gap-1.5 rounded-lg border border-accent/30 bg-accent/10 px-3 py-1.5 text-xs font-semibold text-accent transition-colors hover:bg-accent/20"
+                    class="flex items-center gap-1.5 rounded-lg border border-ink/10 px-3 py-1.5 text-xs font-semibold text-ink transition-colors hover:bg-ink/5"
+                    @click="openStartModal"
+                >
+                    <span>▶️</span>
+                    <span>Iniciar instância (teste)</span>
+                </button>
+                <button
+                    type="button"
+                    class="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors"
+                    :class="errorIssues.length
+                        ? 'border-danger/30 bg-danger/10 text-danger hover:bg-danger/20'
+                        : 'border-accent/30 bg-accent/10 text-accent hover:bg-accent/20'"
                     @click="showAiModal = true"
                 >
-                    <span>✨</span>
-                    <span>Ajustar com IA</span>
+                    <span>{{ errorIssues.length ? '🛠️' : '✨' }}</span>
+                    <span>{{ errorIssues.length ? 'Corrigir Erros com IA' : 'Ajustar com IA' }}</span>
                 </button>
                 <button
                     type="button"
@@ -426,8 +513,13 @@ function publish() {
                                 <option value="">Nenhum</option>
                                 <option value="role">Papel</option>
                                 <option value="user">Usuário</option>
+                                <option value="external">Externo (fora do Aresta)</option>
                             </select>
                         </label>
+                        <p v-if="selectedActivity.data.assigneeType === 'external'" class="mb-3 text-xs text-ink/60">
+                            Só pode ser concluída via API por um sistema externo — ninguém assume ou
+                            completa pela Inbox do Aresta.
+                        </p>
                         <label v-if="selectedActivity.data.assigneeType === 'role'" class="aresta-label mb-3">
                             Papel
                             <select
@@ -563,7 +655,7 @@ function publish() {
                         <select
                             class="aresta-input mt-1"
                             :value="selectedTransition.data.conditionType"
-                            @change="updateTransition({ condition_type: $event.target.value })"
+                            @change="onConditionTypeChange($event.target.value)"
                         >
                             <option value="always">Sempre (paralelo/sequencial)</option>
                             <option value="expression">Condição</option>
@@ -580,16 +672,16 @@ function publish() {
                             <input
                                 class="aresta-input mt-1"
                                 placeholder="context.valor_proposta"
-                                :value="selectedTransition.data.conditionExpression?.field ?? ''"
-                                @change="updateTransition({ condition_expression: { ...selectedTransition.data.conditionExpression, field: $event.target.value } })"
+                                :value="conditionExpressionOf(selectedTransition).field"
+                                @change="updateTransition({ conditionExpression: { ...conditionExpressionOf(selectedTransition), field: $event.target.value } })"
                             />
                         </label>
                         <label class="aresta-label mb-3">
                             Operador
                             <select
                                 class="aresta-input mt-1"
-                                :value="selectedTransition.data.conditionExpression?.operator ?? '='"
-                                @change="updateTransition({ condition_expression: { ...selectedTransition.data.conditionExpression, operator: $event.target.value } })"
+                                :value="conditionExpressionOf(selectedTransition).operator"
+                                @change="updateTransition({ conditionExpression: { ...conditionExpressionOf(selectedTransition), operator: $event.target.value } })"
                             >
                                 <option value="=">= igual</option>
                                 <option value="!=">≠ diferente</option>
@@ -603,8 +695,8 @@ function publish() {
                             Valor
                             <input
                                 class="aresta-input mt-1"
-                                :value="selectedTransition.data.conditionExpression?.value ?? ''"
-                                @change="updateTransition({ condition_expression: { ...selectedTransition.data.conditionExpression, value: $event.target.value } })"
+                                :value="conditionExpressionOf(selectedTransition).value"
+                                @change="updateTransition({ conditionExpression: { ...conditionExpressionOf(selectedTransition), value: $event.target.value } })"
                             />
                         </label>
                     </template>
@@ -618,8 +710,67 @@ function publish() {
             :show="showAiModal"
             :workflow="workflow"
             :version="version"
+            :initial-instructions="suggestedFixInstructions"
             @close="showAiModal = false"
         />
+
+        <!-- Modal de Iniciar Instância de Teste — mesmo padrão de Workflows/Show.vue -->
+        <Modal :show="showStartModal" maxWidth="lg" @close="closeStartModal">
+            <div class="mb-5 flex items-center justify-between">
+                <h2 class="text-lg font-bold text-ink">Iniciar instância (teste)</h2>
+                <button
+                    type="button"
+                    class="rounded-lg p-1.5 text-ink/60 hover:bg-ink/5 hover:text-ink transition-colors"
+                    aria-label="Fechar"
+                    @click="closeStartModal"
+                >
+                    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+
+            <p class="mb-4 text-xs text-ink/60">
+                Cria uma instância real a partir da versão vigente (v{{ workflow.currentPublishedVersionNumber }}), não do
+                rascunho que você está editando agora — alterações do rascunho só valem depois de publicadas.
+            </p>
+
+            <form @submit.prevent="submitStart">
+                <label class="aresta-label mb-4">
+                    Nome da instância <span class="font-normal text-ink/50">(opcional)</span>
+                    <input v-model="startForm.name" class="aresta-input mt-1.5" :placeholder="workflow.name" autofocus />
+                </label>
+                <p v-if="startForm.errors.name" class="aresta-error-text mb-3">{{ startForm.errors.name }}</p>
+
+                <label class="aresta-label mb-4">
+                    Dados iniciais <span class="font-normal text-ink/50">(JSON opcional, usado por condições)</span>
+                    <textarea
+                        v-model="startForm.context"
+                        rows="4"
+                        class="aresta-input mt-1.5 font-mono text-xs"
+                        placeholder='Ex.: {"valor": 500}'
+                    ></textarea>
+                </label>
+                <p v-if="startForm.errors.context" class="aresta-error-text mb-3">{{ startForm.errors.context }}</p>
+
+                <div class="mt-6 flex items-center justify-end gap-3">
+                    <button
+                        type="button"
+                        class="rounded-lg border border-ink/15 px-4 py-2.5 text-sm font-semibold text-ink hover:bg-ink/5 transition-colors"
+                        @click="closeStartModal"
+                    >
+                        Cancelar
+                    </button>
+                    <button
+                        type="submit"
+                        class="rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-accent-ink transition-opacity hover:opacity-90 disabled:opacity-50"
+                        :disabled="startForm.processing"
+                    >
+                        Iniciar
+                    </button>
+                </div>
+            </form>
+        </Modal>
     </div>
 </template>
 

@@ -8,6 +8,7 @@ const props = defineProps({
     show: { type: Boolean, default: false },
     workflow: { type: Object, required: true },
     version: { type: Object, required: true },
+    initialInstructions: { type: String, default: '' },
 });
 
 const emit = defineEmits(['close']);
@@ -22,7 +23,7 @@ watch(
     (isShown) => {
         if (isShown) {
             form.description = props.workflow.description ?? '';
-            form.instructions = '';
+            form.instructions = props.initialInstructions || '';
             form.clearErrors();
         }
     }
@@ -47,8 +48,14 @@ function submit() {
             <div class="flex items-center gap-2">
                 <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-accent/15 text-accent font-bold">✨</span>
                 <div>
-                    <h2 class="text-base font-bold text-ink">Ajustar Workflow com IA</h2>
-                    <p class="text-xs text-ink/60">Refine a estrutura, etapas, transições ou papéis em linguagem natural</p>
+                    <h2 class="text-base font-bold text-ink">{{ initialInstructions ? 'Corrigir Erros com IA' : 'Ajustar Workflow com IA' }}</h2>
+                    <p class="text-xs text-ink/60">
+                        {{
+                            initialInstructions
+                                ? 'Revise a correção sugerida antes de aplicar'
+                                : 'Refine a estrutura, etapas, transições ou papéis em linguagem natural'
+                        }}
+                    </p>
                 </div>
             </div>
             <button
