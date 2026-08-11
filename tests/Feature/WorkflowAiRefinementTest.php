@@ -82,13 +82,18 @@ class WorkflowAiRefinementTest extends TestCase
         return [$workflow, $version, $step, $activity];
     }
 
-    private function geminiResponse(array $payload)
+    private function geminiBody(array $payload): array
     {
-        return Http::response([
+        return [
             'candidates' => [
                 ['content' => ['parts' => [['text' => json_encode($payload)]]]],
             ],
-        ]);
+        ];
+    }
+
+    private function geminiResponse(array $payload)
+    {
+        return Http::response($this->geminiBody($payload));
     }
 
     public function test_refine_ai_updates_draft_workflow_version_graph(): void
@@ -204,6 +209,54 @@ class WorkflowAiRefinementTest extends TestCase
         $auditActivity = WorkflowActivity::where('name', 'Verificar conformidade')->firstOrFail();
         $this->assertSame('role', $auditActivity->assignee_type->value);
         $this->assertSame($newRole->id, $auditActivity->assignee_role_id);
+    }
+
+    public function test_refine_ai_retries_once_when_first_response_has_invalid_shape(): void
+    {
+        config(['services.gemini.key' => 'test-gemini-key']);
+        [$org, $user, $role] = $this->createAdminUserWithRole();
+        [$workflow, $version] = $this->createWorkflowWithDraft($org, $user);
+
+        $validPayload = [
+            'is_workflow_description' => true,
+            'steps' => [
+                [
+                    'name' => 'Solicitação',
+                    'activities' => [
+                        [
+                            'tmp_id' => 'a1',
+                            'name' => 'Preencher formulário de compra',
+                            'type' => 'form',
+                            'is_start' => true,
+                            'is_end' => true,
+                        ],
+                    ],
+                ],
+            ],
+            'transitions' => [],
+        ];
+
+        // Primeira resposta vem com is_workflow_description=true mas nenhuma atividade
+        // marcada como is_start — malformada o bastante pra assertValidShape() rejeitar,
+        // mas o tipo de erro pontual do modelo que uma segunda tentativa costuma corrigir.
+        $malformedPayload = $validPayload;
+        $malformedPayload['steps'][0]['activities'][0]['is_start'] = false;
+
+        Http::fake([
+            self::GEMINI_URL => Http::sequence()
+                ->push($this->geminiBody($malformedPayload))
+                ->push($this->geminiBody($validPayload)),
+        ]);
+
+        $response = $this->actingAs($user)->post(
+            route('workflows.versions.refine-ai', [$workflow, $version]),
+            ['instructions' => 'Corrigir os problemas estruturais do processo.']
+        );
+
+        $response->assertRedirect(route('workflows.versions.edit', [$workflow, $version]));
+        Http::assertSentCount(2);
+
+        $this->assertSame(1, WorkflowActivity::whereHas('workflowStep', fn ($q) => $q->where('workflow_version_id', $version->id))->count());
     }
 
     public function test_refine_ai_refuses_when_ai_returns_off_topic_instructions(): void

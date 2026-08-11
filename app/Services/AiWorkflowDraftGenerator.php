@@ -15,6 +15,7 @@ use App\Models\WorkflowTransition;
 use App\Models\WorkflowVersion;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
 use Throwable;
 
@@ -59,15 +60,13 @@ class AiWorkflowDraftGenerator
             ->orderBy('name')
             ->get(['id', 'name']);
 
-        $raw = $this->callLlm($this->buildPrompt($description, $roles));
+        $raw = $this->callLlmAndValidateShape($this->buildPrompt($description, $roles));
 
         if (($raw['is_workflow_description'] ?? null) !== true) {
             throw new WorkflowDraftRefusedException(
                 $raw['refusal_reason'] ?? 'A descrição não parece descrever um processo de trabalho.',
             );
         }
-
-        $this->assertValidShape($raw);
 
         // Modelos pequenos (Ollama local, principalmente) às vezes acertam etapas/atividades
         // mas confundem um tmp_id numa transição isolada (ex.: usam o nome de uma etapa em vez
@@ -228,14 +227,61 @@ class AiWorkflowDraftGenerator
     }
 
     /**
+     * Chama o LLM e garante um `assertValidShape()` válido, tentando de novo (uma vez) se a
+     * primeira resposta vier com `is_workflow_description: true` mas malformada — na prática,
+     * isso costuma ser um erro pontual do modelo (esquecer o `is_start` numa reestruturação,
+     * por exemplo), não uma limitação real do prompt, e uma segunda tentativa resolve na
+     * maioria dos casos observados. Uma recusa (`is_workflow_description: false`) nunca é
+     * reprocessada — é uma decisão da IA, não um erro de formato.
+     */
+    protected function callLlmAndValidateShape(string $prompt, ?string $genericError = null): array
+    {
+        $raw = $this->callLlm($prompt);
+
+        if (($raw['is_workflow_description'] ?? null) !== true) {
+            return $raw;
+        }
+
+        try {
+            $this->assertValidShape($raw, $genericError);
+
+            return $raw;
+        } catch (WorkflowDraftRefusedException) {
+            $raw = $this->callLlm($prompt);
+
+            if (($raw['is_workflow_description'] ?? null) === true) {
+                $this->assertValidShape($raw, $genericError);
+            }
+
+            return $raw;
+        }
+    }
+
+    /**
      * Sanity estrutural — não é validação de grafo (fork/join, alcançabilidade etc. são papel
      * do `WorkflowGraphValidator`, que já roda sozinho quando o editor carrega). Aqui só
      * garante que dá pra montar as linhas do banco sem estourar em `create()`.
      */
-    protected function assertValidShape(array $raw): void
+    protected function assertValidShape(array $raw, ?string $genericError = null): void
     {
-        $genericError = 'Não foi possível gerar um rascunho válido a partir dessa descrição. Tente reformular.';
+        try {
+            $this->doAssertValidShape($raw, $genericError ?? 'Não foi possível gerar um rascunho válido a partir dessa descrição. Tente reformular.');
+        } catch (WorkflowDraftRefusedException $e) {
+            // Sem isso, uma resposta malformada do LLM (steps/activities faltando, is_start
+            // duplicado ou ausente etc.) só chega ao usuário como mensagem genérica, sem
+            // nenhum rastro do que a IA de fato devolveu — inviabiliza diagnosticar se é o
+            // provedor "alucinando" ou um problema no prompt.
+            Log::warning('AiWorkflowDraftGenerator: resposta da IA rejeitada por assertValidShape', [
+                'reason' => $e->getMessage(),
+                'raw' => $raw,
+            ]);
 
+            throw $e;
+        }
+    }
+
+    private function doAssertValidShape(array $raw, string $genericError): void
+    {
         $this->ensure(is_array($raw['steps'] ?? null) && count($raw['steps']) > 0, $genericError);
         $this->ensure(is_array($raw['transitions'] ?? null), $genericError);
 

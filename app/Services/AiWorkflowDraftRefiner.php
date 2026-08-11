@@ -45,7 +45,10 @@ class AiWorkflowDraftRefiner extends AiWorkflowDraftGenerator
             instructions: $instructions,
         );
 
-        $raw = $this->callLlm($prompt);
+        $raw = $this->callLlmAndValidateShape(
+            $prompt,
+            genericError: 'A IA não conseguiu aplicar essas instruções de forma consistente. Tente novamente ou ajuste o texto.',
+        );
 
         if (($raw['is_workflow_description'] ?? null) !== true) {
             throw new WorkflowDraftRefusedException(
@@ -53,7 +56,6 @@ class AiWorkflowDraftRefiner extends AiWorkflowDraftGenerator
             );
         }
 
-        $this->assertValidShape($raw);
         $raw['transitions'] = $this->filterResolvableTransitions($raw);
 
         if ($updatedDescription !== null && $updatedDescription !== $workflow->description) {
