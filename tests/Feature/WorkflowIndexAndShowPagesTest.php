@@ -52,6 +52,7 @@ class WorkflowIndexAndShowPagesTest extends TestCase
                 ->component('Workflows/Show')
                 ->where('workflow.currentPublishedVersionId', $version->id)
                 ->where('publishedVersions.0.version_number', 1)
+                ->where('publishedVersions.0.published_by_name', $user->name)
             );
     }
 }
